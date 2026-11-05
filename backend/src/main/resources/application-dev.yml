@@ -1,0 +1,18 @@
+# 로컬 PostgreSQL. 접속 정보는 환경 변수로 주입한다 (.env.example 참고)
+# 저장소 루트의 .env도 읽는다. 실제 환경 변수가 있으면 그 값이 우선한다
+spring:
+  config:
+    import: "optional:file:../.env[.properties],optional:file:.env[.properties]"
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+    org.hibernate.type.descriptor.sql.BasicBinder: trace
