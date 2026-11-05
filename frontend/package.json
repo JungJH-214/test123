@@ -1,0 +1,12 @@
+{
+  "name": "eduhub-frontend",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "generate:api": "npm run generate:api -w packages/api-client",
+    "test": "npm test --workspaces --if-present"
+  }
+}

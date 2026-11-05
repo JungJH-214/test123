@@ -9,7 +9,7 @@ EduHub는 사내 교육과정 신청시스템이다.
 | 경로 | 내용 |
 |---|---|
 | `backend/` | Spring Boot API 서버. 작업 규칙은 `backend/CLAUDE.md` |
-| `frontend/` | React 화면 (아직 코드 없음). 작업 규칙은 `frontend/CLAUDE.md` |
+| `frontend/` | React 화면 (npm workspaces). 작업 규칙은 `frontend/CLAUDE.md` |
 | `docs/requirements.md` | 요구사항(FR, NFR)과 결정 사항(D-xx) |
 | `.env.example` | 로컬 환경 변수 이름. 실제 값은 루트 `.env`에 쓴다 |
 
@@ -18,8 +18,9 @@ EduHub는 사내 교육과정 신청시스템이다.
 |---|---|
 | 백엔드 테스트 | `cd backend && ./gradlew test` |
 | 백엔드 로컬 실행 | `cd backend && ./gradlew bootRun` |
-
-프론트엔드 명령은 코드가 생기면 추가한다.
+| 프론트 테스트 | `cd frontend && npm test -w apps/course-mfe` |
+| 프론트 실행 (포트 3001) | `cd frontend && npm run dev -w apps/course-mfe` |
+| API 클라이언트 재생성 | `cd frontend && npm run generate:api` (백엔드가 8080에 떠 있어야 함) |
 
 ## 공통 규칙
 - **요구사항 기준:** 요구사항은 `docs/requirements.md`를 기준으로 한다 (결정 사항 D-xx 포함)
