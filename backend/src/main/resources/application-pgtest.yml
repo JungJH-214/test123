@@ -1,0 +1,9 @@
+# 로컬 PostgreSQL 테스트 DB (리포지토리 테스트용). 접속 정보는 루트 .env에서 읽는다
+# Docker가 준비되면 Testcontainers로 교체한다
+spring:
+  config:
+    import: "optional:file:../.env[.properties],optional:file:.env[.properties]"
+  datasource:
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_TEST_DB:eduhub_test}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}

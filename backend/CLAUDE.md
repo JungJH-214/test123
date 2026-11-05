@@ -38,6 +38,7 @@ Spring Boot API 서버. 명령은 모두 `backend/`에서 실행한다.
 ## 프로필
 - **dev (기본):** 로컬 PostgreSQL(`localhost:5432/eduhub`)에 접속한다. 루트 `.env`를 `spring.config.import`로 읽고, 실제 환경 변수가 있으면 그 값이 우선한다
 - **test:** H2(PostgreSQL 모드)를 쓴다. `@SpringBootTest`에는 `@ActiveProfiles("test")`를 붙인다
+- **pgtest:** 리포지토리 테스트(`@DataJpaTest` + `replace = NONE`)는 로컬 PostgreSQL의 `eduhub_test`를 쓴다. 그래서 `./gradlew test`를 돌리려면 로컬 PG와 루트 `.env`가 있어야 한다
 - **H2 한계:** H2는 락 동작이 PostgreSQL과 다르다. 동시성 테스트(NFR-01)는 Docker가 준비되면 Testcontainers로 옮긴다
 
 ## Windows 환경 주의
