@@ -12,7 +12,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 교육과정. 상태는 {@link #close()}로만 바꾼다. */
+/** 교육과정. 값은 {@link #update}, 상태는 {@link #close()}로만 바꾼다. */
 @Entity
 @Table(name = "course")
 @Getter
@@ -45,6 +45,17 @@ public class Course {
 
   public static Course create(String title, String category, String description) {
     return new Course(title, category, description);
+  }
+
+  /** 제목, 분류, 설명을 바꾼다. 종료 여부 확인은 서비스에서 한다. */
+  public void update(String title, String category, String description) {
+    this.title = title;
+    this.category = category;
+    this.description = description;
+  }
+
+  public boolean isClosed() {
+    return status == CourseStatus.CLOSED;
   }
 
   public void close() {

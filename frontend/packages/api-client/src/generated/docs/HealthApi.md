@@ -46,6 +46,8 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**400** | Bad Request |  -  |
+|**409** | Conflict |  -  |
 |**404** | Not Found |  -  |
 |**200** | OK |  -  |
 

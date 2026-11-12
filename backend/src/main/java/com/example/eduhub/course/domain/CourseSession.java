@@ -16,7 +16,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 과정의 회차. 상태는 {@link #close()}로만 바꾼다. */
+/** 과정의 회차. 값은 {@link #update}, 상태는 {@link #close()}로만 바꾼다. */
 @Entity
 @Table(name = "course_session")
 @Getter
@@ -55,6 +55,17 @@ public class CourseSession {
   public static CourseSession create(
       Course course, LocalDate startDate, String place, int capacity) {
     return new CourseSession(course, startDate, place, capacity);
+  }
+
+  /** 시작일, 장소, 정원을 바꾼다. 종료 여부 확인은 서비스에서 한다. */
+  public void update(LocalDate startDate, String place, int capacity) {
+    this.startDate = startDate;
+    this.place = place;
+    this.capacity = capacity;
+  }
+
+  public boolean isClosed() {
+    return status == SessionStatus.CLOSED;
   }
 
   public void close() {

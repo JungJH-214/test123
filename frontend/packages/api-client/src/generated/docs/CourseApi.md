@@ -53,6 +53,8 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**400** | Bad Request |  -  |
+|**409** | Conflict |  -  |
 |**404** | 과정이 없음 |  -  |
 |**200** | 조회 성공 |  -  |
 
@@ -116,6 +118,8 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**400** | Bad Request |  -  |
+|**409** | Conflict |  -  |
 |**404** | Not Found |  -  |
 |**200** | OK |  -  |
 
