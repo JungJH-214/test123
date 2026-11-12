@@ -1,5 +1,6 @@
 import type { CourseDetailResponse } from '@eduhub/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAdminCourse } from '../../hooks/useAdminCourse';
 import { useAdminCourseActions } from '../../hooks/useAdminCourseActions';
@@ -36,7 +37,11 @@ function setup(course: CourseDetailResponse) {
   };
   mockedUseAdminCourse.mockReturnValue({ data: course, loading: false, error: null, reload });
   mockedUseActions.mockReturnValue(actions);
-  render(<AdminCourseDetailPage courseId={1} />);
+  render(
+    <MemoryRouter>
+      <AdminCourseDetailPage courseId={1} />
+    </MemoryRouter>,
+  );
   return { reload, actions };
 }
 

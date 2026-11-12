@@ -20,6 +20,7 @@ import {
   Typography,
 } from '@mui/material';
 import { FormEvent, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CATEGORIES } from '../constants/categories';
 import { useCourses } from '../hooks/useCourses';
 
@@ -38,6 +39,7 @@ export function CourseListPage() {
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(20);
 
+  const navigate = useNavigate();
   const { data, loading, error } = useCourses({ keyword, category, page, size });
 
   const handleSearch = (event: FormEvent) => {
@@ -115,7 +117,12 @@ export function CourseListPage() {
                   </TableRow>
                 ) : (
                   courses.map((course) => (
-                    <TableRow key={course.id}>
+                    <TableRow
+                      key={course.id}
+                      hover
+                      sx={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/courses/${course.id}`)}
+                    >
                       <TableCell>{course.title}</TableCell>
                       <TableCell>{course.category}</TableCell>
                       <TableCell>{STATUS_LABELS[course.status ?? ''] ?? course.status}</TableCell>

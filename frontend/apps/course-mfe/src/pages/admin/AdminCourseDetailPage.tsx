@@ -17,6 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { useAdminCourse } from '../../hooks/useAdminCourse';
 import { useAdminCourseActions } from '../../hooks/useAdminCourseActions';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -51,7 +52,7 @@ export function AdminCourseDetailPage({ courseId }: { courseId: number }) {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="error">과정을 불러오지 못했습니다. ({error})</Alert>
-        <Link href="#/admin">목록으로</Link>
+        <Link component={RouterLink} to="/admin">목록으로</Link>
       </Box>
     );
   }
@@ -94,7 +95,7 @@ export function AdminCourseDetailPage({ courseId }: { courseId: number }) {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Link href="#/admin">← 과정 관리</Link>
+      <Link component={RouterLink} to="/admin">← 과정 관리</Link>
 
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1, mb: 1 }}>
         <Typography variant="h5" component="h1">

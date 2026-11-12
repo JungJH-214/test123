@@ -20,12 +20,13 @@ import type { CourseRequest } from '@eduhub/api-client';
 import { FormEvent, useState } from 'react';
 import { useAdminCourseActions } from '../../hooks/useAdminCourseActions';
 import { useCourses } from '../../hooks/useCourses';
-import { navigate } from '../../hooks/useHashRoute';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { CourseFormDialog } from './CourseFormDialog';
 import { STATUS_LABELS } from './statusLabels';
 
 /** 관리자 과정 목록 (FR-03). 등록하면 새 과정의 관리 화면으로 간다. */
 export function AdminCourseListPage() {
+  const navigate = useNavigate();
   const [keywordInput, setKeywordInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(0);
@@ -105,7 +106,7 @@ export function AdminCourseListPage() {
                     <TableRow key={course.id} hover>
                       <TableCell>{course.id}</TableCell>
                       <TableCell>
-                        <Link href={`#/admin/courses/${course.id}`}>{course.title}</Link>
+                        <Link component={RouterLink} to={`/admin/courses/${course.id}`}>{course.title}</Link>
                       </TableCell>
                       <TableCell>{course.category}</TableCell>
                       <TableCell>{STATUS_LABELS[course.status ?? ''] ?? course.status}</TableCell>

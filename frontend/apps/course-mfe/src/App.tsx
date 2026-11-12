@@ -1,14 +1,18 @@
 import { CssBaseline } from '@mui/material';
-import { useHashRoute } from './hooks/useHashRoute';
-import { AdminApp } from './pages/admin/AdminApp';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { AdminRoutes } from './pages/admin/AdminApp';
+import { CourseDetailPage } from './pages/CourseDetailPage';
 import { CourseListPage } from './pages/CourseListPage';
 
 export function App() {
-  const route = useHashRoute();
   return (
-    <>
+    <BrowserRouter>
       <CssBaseline />
-      {route.startsWith('/admin') ? <AdminApp route={route} /> : <CourseListPage />}
-    </>
+      <Routes>
+        <Route path="/" element={<CourseListPage />} />
+        <Route path="/courses/:id" element={<CourseDetailPage />} />
+        <Route path="/admin/*" element={<AdminRoutes />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
