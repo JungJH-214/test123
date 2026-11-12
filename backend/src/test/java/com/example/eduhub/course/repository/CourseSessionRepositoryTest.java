@@ -36,6 +36,22 @@ class CourseSessionRepositoryTest {
   }
 
   @Test
+  void findByIdForUpdate_returnsSession() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession session =
+        em.persist(CourseSession.create(course, LocalDate.of(2026, 12, 1), "본사", 10));
+    em.flush();
+    em.clear();
+
+    assertThat(courseSessionRepository.findByIdForUpdate(session.getId())).isPresent();
+  }
+
+  @Test
+  void findByIdForUpdate_unknownId_returnsEmpty() {
+    assertThat(courseSessionRepository.findByIdForUpdate(-1L)).isEmpty();
+  }
+
+  @Test
   void update_isFlushedToDatabase() {
     Course course = em.persist(Course.create("Java 기초", "개발", null));
     CourseSession session =
