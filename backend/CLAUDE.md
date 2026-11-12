@@ -3,7 +3,7 @@
 Spring Boot API 서버. 명령은 모두 `backend/`에서 실행한다.
 
 ## 명령
-**JDK 지정:** Gradle은 Java 11로 실행해야 한다. 시스템 `JAVA_HOME`이 JDK 8을 가리키므로, Bash에서는 명령 앞에 `JAVA_HOME="/c/Program Files/Zulu/zulu-11"`을 붙인다.
+**JDK 지정:** Gradle은 Java 11로 실행해야 한다. 시스템 `JAVA_HOME`이 JDK 8을 가리키므로, 개인 설정 `.claude/settings.local.json`의 `env.JAVA_HOME`에 JDK 11 경로를 넣는다. 그러면 명령 앞에 `JAVA_HOME=`을 붙이지 않아도 되고, `.claude/settings.json`의 허용 규칙(`./gradlew test` 등)에도 그대로 맞는다.
 
 | 목적 | 명령 |
 |---|---|
