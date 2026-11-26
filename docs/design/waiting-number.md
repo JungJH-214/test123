@@ -87,7 +87,7 @@
 | ID | 시나리오 | 기대 |
 |---|---|---|
 | C1 | 서비스가 대기 응답 반환 | 201, `$.status == "WAITING"`, `$.waitingNumber == 3` |
-| C2 | 서비스가 확정 응답 반환 | 201, `$.waitingNumber`가 존재하고 `null` (`jsonPath(...).value(nullValue())` + `exists()`) |
+| C2 | 서비스가 확정 응답 반환 | 201, `$.waitingNumber`가 존재하고 `null` (`jsonPath("$", hasKey("waitingNumber"))` + `jsonPath("$.waitingNumber").isEmpty()`. MockMvc의 `exists()`·`value(nullValue())`는 null 값에서 실패한다) |
 | C3 (Q2) | OpenAPI 문서 | `/v3/api-docs`의 신청 API와 `/api/me`에 `jwt` 파라미터가 없다. `SecurityIntegrationTest` 또는 별도 `@SpringBootTest`에서 확인 |
 
 ### 동시성 (`EnrollmentConcurrencyTest`, pgtest)

@@ -8,11 +8,13 @@ import com.example.eduhub.course.repository.CourseRepository;
 import com.example.eduhub.course.repository.CourseSessionRepository;
 import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
+import com.example.eduhub.enrollment.dto.EnrollmentResponse;
 import com.example.eduhub.enrollment.exception.SessionFullException;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
 import com.example.eduhub.enrollment.service.EnrollmentCommandService;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -21,6 +23,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +48,7 @@ class EnrollmentConcurrencyTest {
   @Autowired private EnrollmentRepository enrollmentRepository;
   @Autowired private CourseRepository courseRepository;
   @Autowired private CourseSessionRepository courseSessionRepository;
+  @PersistenceContext private EntityManager entityManager;
 
   @AfterEach
   void cleanUp() {
@@ -69,6 +75,15 @@ class EnrollmentConcurrencyTest {
     assertThat(result.succeeded).isEqualTo(15);
     assertThat(result.rejected).isEqualTo(85);
     assertThat(result.otherErrors).isEmpty();
+    assertWaitingNumbers(result);
+    assertThat(
+            result.responses.stream()
+                .filter(r -> r.getStatus() == EnrollmentStatus.CONFIRMED)
+                .map(EnrollmentResponse::getWaitingNumber)
+                .collect(Collectors.toList()))
+        .hasSize(10)
+        .containsOnlyNulls();
+    assertWaitingNumbersFollowCreatedAtAndId(session.getId(), result);
   }
 
   @Test
@@ -92,6 +107,44 @@ class EnrollmentConcurrencyTest {
     assertThat(result.succeeded).isEqualTo(6);
     assertThat(result.rejected).isEqualTo(94);
     assertThat(result.otherErrors).isEmpty();
+    assertWaitingNumbers(result);
+  }
+
+  private void assertWaitingNumbers(Result result) {
+    List<Integer> numbers =
+        result.responses.stream()
+            .filter(r -> r.getStatus() == EnrollmentStatus.WAITING)
+            .map(EnrollmentResponse::getWaitingNumber)
+            .collect(Collectors.toList());
+    assertThat(numbers).hasSize(5).containsExactlyInAnyOrder(1, 2, 3, 4, 5);
+  }
+
+  /**
+   * R3: 응답 순번 순서가 D-04 순서(created_at, id 오름차순)와 같다.
+   *
+   * <p>한계: created_at은 애플리케이션 시각(LocalDateTime.now())이라 동시 신청에서 같은 값이 나올 수 있다. 그 경우 정렬은 사실상 id
+   * 순서이므로, 순번 계산이 락 밖으로 나가 id 순서와 어긋나는 회귀는 잡지만 시계와 락 순서가 어긋나는 경우는 검증하지 못한다 (설계명세 4절 "시계" 위험).
+   */
+  private void assertWaitingNumbersFollowCreatedAtAndId(Long sessionId, Result result) {
+    List<Long> dbOrder =
+        entityManager
+            .createQuery(
+                "select e from Enrollment e where e.session.id = :sid and e.status = :st"
+                    + " order by e.createdAt, e.id",
+                Enrollment.class)
+            .setParameter("sid", sessionId)
+            .setParameter("st", EnrollmentStatus.WAITING)
+            .getResultList()
+            .stream()
+            .map(Enrollment::getId)
+            .collect(Collectors.toList());
+    List<Long> responseOrder =
+        result.responses.stream()
+            .filter(r -> r.getStatus() == EnrollmentStatus.WAITING)
+            .sorted(Comparator.comparing(EnrollmentResponse::getWaitingNumber))
+            .map(EnrollmentResponse::getId)
+            .collect(Collectors.toList());
+    assertThat(responseOrder).containsExactlyElementsOf(dbOrder);
   }
 
   private long totalInSession(Long sessionId) {
@@ -113,6 +166,7 @@ class EnrollmentConcurrencyTest {
     AtomicInteger succeeded = new AtomicInteger();
     AtomicInteger rejected = new AtomicInteger();
     Queue<Throwable> otherErrors = new ConcurrentLinkedQueue<>();
+    Queue<EnrollmentResponse> responses = new ConcurrentLinkedQueue<>();
 
     boolean finished;
     try {
@@ -123,7 +177,7 @@ class EnrollmentConcurrencyTest {
               try {
                 ready.countDown();
                 start.await();
-                enrollmentCommandService.enroll(sessionId, employeeId);
+                responses.add(enrollmentCommandService.enroll(sessionId, employeeId));
                 succeeded.incrementAndGet();
               } catch (SessionFullException e) {
                 rejected.incrementAndGet();
@@ -143,18 +197,25 @@ class EnrollmentConcurrencyTest {
     }
 
     assertThat(finished).as("60초 안에 모든 신청이 끝나야 한다").isTrue();
-    return new Result(succeeded.get(), rejected.get(), new ArrayList<>(otherErrors));
+    return new Result(
+        succeeded.get(), rejected.get(), new ArrayList<>(otherErrors), new ArrayList<>(responses));
   }
 
   private static class Result {
     private final int succeeded;
     private final int rejected;
     private final List<Throwable> otherErrors;
+    private final List<EnrollmentResponse> responses;
 
-    private Result(int succeeded, int rejected, List<Throwable> otherErrors) {
+    private Result(
+        int succeeded,
+        int rejected,
+        List<Throwable> otherErrors,
+        List<EnrollmentResponse> responses) {
       this.succeeded = succeeded;
       this.rejected = rejected;
       this.otherErrors = otherErrors;
+      this.responses = responses;
     }
   }
 }

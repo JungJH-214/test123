@@ -33,7 +33,9 @@ public class EnrollmentController {
   private final EnrollmentCommandService enrollmentCommandService;
 
   @Operation(summary = "수강 신청 (정원 안이면 확정, 정원이 차면 대기)")
-  @ApiResponse(responseCode = "201", description = "신청 성공 (status: CONFIRMED 또는 WAITING)")
+  @ApiResponse(
+      responseCode = "201",
+      description = "신청 성공 (status: CONFIRMED, 또는 WAITING과 waitingNumber)")
   @ApiResponse(
       responseCode = "400",
       description = "경로 값 형식 오류 (INVALID_REQUEST)",
