@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.eduhub.auth.config.JsonSecurityErrorHandler;
+import com.example.eduhub.auth.config.SecurityConfig;
 import com.example.eduhub.common.dto.PageResponse;
 import com.example.eduhub.course.domain.Course;
 import com.example.eduhub.course.domain.CourseSession;
@@ -25,11 +27,13 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.web.servlet.MockMvc;
 
+@Import({SecurityConfig.class, JsonSecurityErrorHandler.class})
 @WebMvcTest(CourseController.class)
 class CourseControllerTest {
 

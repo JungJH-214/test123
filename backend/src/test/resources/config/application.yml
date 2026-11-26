@@ -1,0 +1,4 @@
+# 테스트 전용 JWT 키. 테스트 클래스패스에만 있다 (NFR-03)
+eduhub:
+  jwt:
+    secret: test-only-jwt-secret-0123456789abcdef

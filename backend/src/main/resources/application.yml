@@ -15,6 +15,12 @@ spring:
     enabled: true
     locations: classpath:db/migration,classpath:db/vendor/{vendor}
 
+eduhub:
+  jwt:
+    secret: ${EDUHUB_JWT_SECRET}
+    issuer: eduhub
+    expires-in: 60m
+
 springdoc:
   api-docs:
     path: /v3/api-docs

@@ -19,6 +19,12 @@ public class GlobalExceptionHandler {
     return ErrorResponse.of(e.getCode(), e.getMessage());
   }
 
+  @ExceptionHandler(UnauthorizedException.class)
+  @ResponseStatus(HttpStatus.UNAUTHORIZED)
+  public ErrorResponse handleUnauthorized(UnauthorizedException e) {
+    return ErrorResponse.of(e.getCode(), e.getMessage());
+  }
+
   @ExceptionHandler(ConflictException.class)
   @ResponseStatus(HttpStatus.CONFLICT)
   public ErrorResponse handleConflict(ConflictException e) {
