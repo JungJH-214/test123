@@ -15,7 +15,11 @@ spring:
       hibernate:
         format_sql: true
 
+eduhub:
+  dev-password: ${EDUHUB_DEV_PASSWORD:}
+
 logging:
   level:
     org.hibernate.SQL: debug
-    org.hibernate.type.descriptor.sql.BasicBinder: trace
+    # 바인딩 파라미터에 password_hash가 찍히므로 trace를 쓰지 않는다
+    org.hibernate.type.descriptor.sql.BasicBinder: info

@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 관리자용 과정·회차 등록, 수정, 종료 (FR-03).
  *
- * <p>TODO(NFR-03): 인증이 아직 없어 권한 검사를 하지 않는다. 인증을 넣을 때 /api/v1/admin/** 에 관리자 권한을 건다.
+ * <p>권한: ADMIN만 호출할 수 있다 (NFR-03, SecurityConfig).
  */
 @Tag(name = "CourseAdmin", description = "교육과정 관리 (관리자)")
 @RestController
@@ -36,6 +36,14 @@ public class CourseAdminController {
   private final CourseCommandService courseCommandService;
 
   @Operation(summary = "과정 등록")
+  @ApiResponse(
+      responseCode = "401",
+      description = "토큰 없음·무효 (UNAUTHORIZED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "관리자 권한 없음 (FORBIDDEN)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(responseCode = "201", description = "등록 성공")
   @ApiResponse(
       responseCode = "400",
@@ -48,6 +56,14 @@ public class CourseAdminController {
   }
 
   @Operation(summary = "과정 수정 (종료된 과정은 409)")
+  @ApiResponse(
+      responseCode = "401",
+      description = "토큰 없음·무효 (UNAUTHORIZED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "관리자 권한 없음 (FORBIDDEN)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(responseCode = "200", description = "수정 성공")
   @ApiResponse(
       responseCode = "400",
@@ -68,6 +84,14 @@ public class CourseAdminController {
   }
 
   @Operation(summary = "과정 종료 (회차도 모두 종료, 이미 종료돼 있으면 그대로 반환)")
+  @ApiResponse(
+      responseCode = "401",
+      description = "토큰 없음·무효 (UNAUTHORIZED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "관리자 권한 없음 (FORBIDDEN)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(responseCode = "200", description = "종료 성공")
   @ApiResponse(
       responseCode = "404",
@@ -79,6 +103,14 @@ public class CourseAdminController {
   }
 
   @Operation(summary = "회차 등록 (종료된 과정은 409)")
+  @ApiResponse(
+      responseCode = "401",
+      description = "토큰 없음·무효 (UNAUTHORIZED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "관리자 권한 없음 (FORBIDDEN)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(responseCode = "201", description = "등록 성공")
   @ApiResponse(
       responseCode = "400",
@@ -100,6 +132,14 @@ public class CourseAdminController {
   }
 
   @Operation(summary = "회차 수정 (종료된 회차는 409)")
+  @ApiResponse(
+      responseCode = "401",
+      description = "토큰 없음·무효 (UNAUTHORIZED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "관리자 권한 없음 (FORBIDDEN)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(responseCode = "200", description = "수정 성공")
   @ApiResponse(
       responseCode = "400",
@@ -122,6 +162,14 @@ public class CourseAdminController {
   }
 
   @Operation(summary = "회차 종료 (이미 종료돼 있으면 그대로 반환)")
+  @ApiResponse(
+      responseCode = "401",
+      description = "토큰 없음·무효 (UNAUTHORIZED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "관리자 권한 없음 (FORBIDDEN)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(responseCode = "200", description = "종료 성공")
   @ApiResponse(
       responseCode = "404",

@@ -4,11 +4,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.eduhub.auth.config.JsonSecurityErrorHandler;
+import com.example.eduhub.auth.config.SecurityConfig;
 import com.example.eduhub.course.domain.Course;
 import com.example.eduhub.course.domain.CourseSession;
 import com.example.eduhub.course.dto.CourseDetailResponse;
@@ -24,10 +29,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+@Import({SecurityConfig.class, JsonSecurityErrorHandler.class})
 @WebMvcTest(CourseAdminController.class)
 class CourseAdminControllerTest {
 
@@ -47,7 +56,7 @@ class CourseAdminControllerTest {
         .willReturn(CourseDetailResponse.of(Course.create("Java 기초", "개발", "입문"), List.of()));
 
     mockMvc
-        .perform(json(post("/api/v1/admin/courses"), COURSE_JSON))
+        .perform(json(post("/api/v1/admin/courses"), COURSE_JSON).with(admin()))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.title").value("Java 기초"))
         .andExpect(jsonPath("$.status").value("OPEN"));
@@ -59,7 +68,7 @@ class CourseAdminControllerTest {
         .willReturn(CourseDetailResponse.of(Course.create("Java 기초", "개발", "입문"), List.of()));
 
     mockMvc
-        .perform(json(put("/api/v1/admin/courses/1"), COURSE_JSON))
+        .perform(json(put("/api/v1/admin/courses/1"), COURSE_JSON).with(admin()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.category").value("개발"));
   }
@@ -72,7 +81,7 @@ class CourseAdminControllerTest {
         .willReturn(CourseDetailResponse.of(course, List.of()));
 
     mockMvc
-        .perform(post("/api/v1/admin/courses/1/close"))
+        .perform(post("/api/v1/admin/courses/1/close").with(admin()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("CLOSED"));
   }
@@ -82,7 +91,7 @@ class CourseAdminControllerTest {
     given(courseCommandService.createSession(eq(1L), any())).willReturn(sessionResponse());
 
     mockMvc
-        .perform(json(post("/api/v1/admin/courses/1/sessions"), SESSION_JSON))
+        .perform(json(post("/api/v1/admin/courses/1/sessions"), SESSION_JSON).with(admin()))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.startDate").value("2026-12-01"))
         .andExpect(jsonPath("$.capacity").value(20));
@@ -93,7 +102,7 @@ class CourseAdminControllerTest {
     given(courseCommandService.updateSession(eq(1L), eq(10L), any())).willReturn(sessionResponse());
 
     mockMvc
-        .perform(json(put("/api/v1/admin/courses/1/sessions/10"), SESSION_JSON))
+        .perform(json(put("/api/v1/admin/courses/1/sessions/10"), SESSION_JSON).with(admin()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.place").value("본사 3층"));
   }
@@ -102,7 +111,38 @@ class CourseAdminControllerTest {
   void closeSession_returns200() throws Exception {
     given(courseCommandService.closeSession(1L, 10L)).willReturn(sessionResponse());
 
-    mockMvc.perform(post("/api/v1/admin/courses/1/sessions/10/close")).andExpect(status().isOk());
+    mockMvc
+        .perform(post("/api/v1/admin/courses/1/sessions/10/close").with(admin()))
+        .andExpect(status().isOk());
+  }
+
+  // ---- 401, 403 ----
+
+  @Test
+  void createCourse_noToken_returns401() throws Exception {
+    mockMvc
+        .perform(json(post("/api/v1/admin/courses"), COURSE_JSON))
+        .andExpect(status().isUnauthorized())
+        .andExpect(header().string("WWW-Authenticate", "Bearer"))
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        .andExpect(content().encoding("UTF-8"))
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+        .andExpect(jsonPath("$.message").value("인증이 필요합니다."));
+    verifyNoInteractions(courseCommandService);
+  }
+
+  @Test
+  void createCourse_employee_returns403() throws Exception {
+    mockMvc
+        .perform(
+            json(post("/api/v1/admin/courses"), COURSE_JSON)
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))))
+        .andExpect(status().isForbidden())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        .andExpect(content().encoding("UTF-8"))
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+        .andExpect(jsonPath("$.message").value("권한이 없습니다."));
+    verifyNoInteractions(courseCommandService);
   }
 
   // ---- 400 ----
@@ -110,7 +150,9 @@ class CourseAdminControllerTest {
   @Test
   void createCourse_blankTitleAndCategory_returns400() throws Exception {
     mockMvc
-        .perform(json(post("/api/v1/admin/courses"), "{\"title\":\" \",\"category\":\"\"}"))
+        .perform(
+            json(post("/api/v1/admin/courses"), "{\"title\":\" \",\"category\":\"\"}")
+                .with(admin()))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
         .andExpect(jsonPath("$.message").value("category: 필수 입력입니다, title: 필수 입력입니다"));
@@ -123,8 +165,9 @@ class CourseAdminControllerTest {
     mockMvc
         .perform(
             json(
-                post("/api/v1/admin/courses"),
-                "{\"title\":\"" + longTitle + "\",\"category\":\"개발\"}"))
+                    post("/api/v1/admin/courses"),
+                    "{\"title\":\"" + longTitle + "\",\"category\":\"개발\"}")
+                .with(admin()))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.message").value("title: 200자 이하로 입력하세요"));
   }
@@ -134,8 +177,9 @@ class CourseAdminControllerTest {
     mockMvc
         .perform(
             json(
-                post("/api/v1/admin/courses/1/sessions"),
-                "{\"startDate\":\"2026-12-01\",\"place\":\"본사\",\"capacity\":0}"))
+                    post("/api/v1/admin/courses/1/sessions"),
+                    "{\"startDate\":\"2026-12-01\",\"place\":\"본사\",\"capacity\":0}")
+                .with(admin()))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
         .andExpect(jsonPath("$.message").value("capacity: 1 이상이어야 합니다"));
@@ -144,7 +188,7 @@ class CourseAdminControllerTest {
   @Test
   void createSession_missingFields_returns400() throws Exception {
     mockMvc
-        .perform(json(post("/api/v1/admin/courses/1/sessions"), "{}"))
+        .perform(json(post("/api/v1/admin/courses/1/sessions"), "{}").with(admin()))
         .andExpect(status().isBadRequest())
         .andExpect(
             jsonPath("$.message")
@@ -156,8 +200,9 @@ class CourseAdminControllerTest {
     mockMvc
         .perform(
             json(
-                post("/api/v1/admin/courses/1/sessions"),
-                "{\"startDate\":\"2026/12/01\",\"place\":\"본사\",\"capacity\":1}"))
+                    post("/api/v1/admin/courses/1/sessions"),
+                    "{\"startDate\":\"2026/12/01\",\"place\":\"본사\",\"capacity\":1}")
+                .with(admin()))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
   }
@@ -170,7 +215,7 @@ class CourseAdminControllerTest {
         .willThrow(new CourseNotFoundException(9L));
 
     mockMvc
-        .perform(json(put("/api/v1/admin/courses/9"), COURSE_JSON))
+        .perform(json(put("/api/v1/admin/courses/9"), COURSE_JSON).with(admin()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("COURSE_NOT_FOUND"));
   }
@@ -181,7 +226,7 @@ class CourseAdminControllerTest {
         .willThrow(new CourseClosedException(1L));
 
     mockMvc
-        .perform(json(put("/api/v1/admin/courses/1"), COURSE_JSON))
+        .perform(json(put("/api/v1/admin/courses/1"), COURSE_JSON).with(admin()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("COURSE_CLOSED"));
   }
@@ -192,7 +237,7 @@ class CourseAdminControllerTest {
         .willThrow(new CourseClosedException(1L));
 
     mockMvc
-        .perform(json(post("/api/v1/admin/courses/1/sessions"), SESSION_JSON))
+        .perform(json(post("/api/v1/admin/courses/1/sessions"), SESSION_JSON).with(admin()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("COURSE_CLOSED"));
   }
@@ -203,7 +248,7 @@ class CourseAdminControllerTest {
         .willThrow(new SessionClosedException(10L));
 
     mockMvc
-        .perform(json(put("/api/v1/admin/courses/1/sessions/10"), SESSION_JSON))
+        .perform(json(put("/api/v1/admin/courses/1/sessions/10"), SESSION_JSON).with(admin()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("SESSION_CLOSED"));
   }
@@ -213,9 +258,13 @@ class CourseAdminControllerTest {
     given(courseCommandService.closeSession(1L, 99L)).willThrow(new SessionNotFoundException(99L));
 
     mockMvc
-        .perform(post("/api/v1/admin/courses/1/sessions/99/close"))
+        .perform(post("/api/v1/admin/courses/1/sessions/99/close").with(admin()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("SESSION_NOT_FOUND"));
+  }
+
+  private static RequestPostProcessor admin() {
+    return jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
   }
 
   private static MockHttpServletRequestBuilder json(

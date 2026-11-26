@@ -19,6 +19,7 @@
 ### POST `/api/v1/sessions/{sessionId}/enrollments` — 수강 신청
 - **신청자:** 요청 본문으로 받지 않는다. 본문은 없다.
   - 임시로 요청 헤더 `X-Employee-Id`(Long, 필수)에서 읽는다 (Q3)
+  - NFR-03에서 토큰의 사원으로 바뀜 (`docs/design/auth.md`)
   - `TODO(NFR-03)`: 인증을 넣으면 로그인 사용자에서 꺼내고, 이 헤더는 지운다
 - **성공:** `201 Created`, 본문은 `EnrollmentResponse`
 - **판정:** 확정(`CONFIRMED`) 수가 정원보다 적으면 `CONFIRMED`다. 정원이 찼고 대기 수가 `capacity / 2`보다 적으면 `WAITING`이다. 둘 다 201이고, 결과는 `status`로 구분한다. 대기까지 차면 409 `SESSION_FULL`이고 저장하지 않는다.
@@ -40,7 +41,7 @@
 
 | HTTP | code | 조건 | 발생 위치 |
 |---|---|---|---|
-| 400 | `MISSING_EMPLOYEE_ID` | `X-Employee-Id` 헤더가 없거나 숫자가 아님 | enrollment 전용 `EnrollmentExceptionHandler`(`@RestControllerAdvice(assignableTypes = EnrollmentController.class)`)가 `MissingRequestHeaderException`과, 이름이 `X-Employee-Id`인 `MethodArgumentTypeMismatchException`을 처리한다. `common/GlobalExceptionHandler`는 바꾸지 않는다 |
+| 400 | `MISSING_EMPLOYEE_ID` | `X-Employee-Id` 헤더가 없거나 숫자가 아님 | enrollment 전용 `EnrollmentExceptionHandler`(`@RestControllerAdvice(assignableTypes = EnrollmentController.class)`)가 `MissingRequestHeaderException`과, 이름이 `X-Employee-Id`인 `MethodArgumentTypeMismatchException`을 처리한다. `common/GlobalExceptionHandler`는 바꾸지 않는다. NFR-03에서 토큰의 사원으로 바뀜 (`docs/design/auth.md`) |
 | 400 | `INVALID_REQUEST` | 경로 값 형식 오류 (예: `/sessions/abc/enrollments`) | 같은 `EnrollmentExceptionHandler`. 헤더가 아닌 `MethodArgumentTypeMismatchException`을 처리한다 |
 | 404 | `SESSION_NOT_FOUND` | 회차가 없음 | 기존 `SessionNotFoundException` 재사용 |
 | 409 | `SESSION_CLOSED` | 종료된 회차 (과정을 종료하면 회차도 종료되므로 과정 종료도 여기에 포함) | 기존 `SessionClosedException` 재사용 |
@@ -125,7 +126,7 @@ CREATE UNIQUE INDEX ux_enrollment_session_employee_active
 | Repository (pgtest) | `CourseSessionRepositoryTest` | `findByIdForUpdate`가 회차를 찾고, 없는 id는 빈 값 |
 | Repository (pgtest) | `EnrollmentRepositoryTest` | `countBySessionIdAndStatus`가 상태별로 센다 / `existsBySessionIdAndEmployeeId` 참·거짓 / 같은 (회차, 임직원)을 두 번 저장하면 `DataIntegrityViolationException` |
 | Service (Mockito) | `EnrollmentCommandServiceTest` | 자리 있음 → `CONFIRMED` / 정원 참, 대기 여유 → `WAITING` / 정원 10·대기 5 참 → `SessionFullException`, 저장 안 함 / 정원 3이면 대기 상한 1 (내림) / 없는 회차 → `SessionNotFoundException` / 종료된 회차 → `SessionClosedException` / 중복 → `DuplicateEnrollmentException` / 저장 중 무결성 위반 → `DuplicateEnrollmentException` / 락 조회 메서드(`findByIdForUpdate`)를 쓰고 `findById`는 쓰지 않음 |
-| Controller (`@WebMvcTest`) | `EnrollmentControllerTest` | 201과 `jsonPath` / 헤더값이 서비스 인자로 전달됨(`ArgumentCaptor`) / 헤더 없음·숫자 아님 400 `MISSING_EMPLOYEE_ID` / 경로 값 형식 오류 400 `INVALID_REQUEST` / 404 `SESSION_NOT_FOUND` / 409 `SESSION_CLOSED`, `ENROLLMENT_DUPLICATE`, `SESSION_FULL` |
+| Controller (`@WebMvcTest`) | `EnrollmentControllerTest` | 201과 `jsonPath` / 헤더값이 서비스 인자로 전달됨(`ArgumentCaptor`) / 헤더 없음·숫자 아님 400 `MISSING_EMPLOYEE_ID` / 경로 값 형식 오류 400 `INVALID_REQUEST` / 404 `SESSION_NOT_FOUND` / 409 `SESSION_CLOSED`, `ENROLLMENT_DUPLICATE`, `SESSION_FULL`. NFR-03에서 토큰의 사원으로 바뀜 (`docs/design/auth.md`) |
 | 동시성 (pgtest, `@SpringBootTest`) | `EnrollmentConcurrencyTest` | ① 정원 10 회차에 서로 다른 임직원 100명이 동시에 신청 → 확정 10, 대기 5, `SESSION_FULL` 거절 85, 그 밖의 예외 0 ② (NFR-01 원문) 확정 9명이 있는 정원 10 회차에 100명이 동시에 신청 → 확정 10, 대기 5, 거절 94 |
 
 동시성 테스트 방식
@@ -139,6 +140,7 @@ CREATE UNIQUE INDEX ux_enrollment_session_employee_active
 - **Q1. D-02 대기 상한:** 지금 적용한다. 상한은 `capacity / 2`(내림)이고, 넘으면 409 `SESSION_FULL`이다.
 - **Q2. H2와 부분 인덱스:** Flyway를 DB별 폴더(`db/vendor/{vendor}`)로 나눈다. H2용 V3는 주석만 둔다.
 - **Q3. 임시 신청자 전달:** `X-Employee-Id` 헤더로 받는다. `TODO(NFR-03)`를 남긴다.
+  - NFR-03에서 토큰의 사원으로 바뀜 (`docs/design/auth.md`)
 - **Q4. 지난 회차:** 막지 않는다.
 
 남은 확인: 정원이 홀수일 때 대기 상한을 내림(정원 7 → 대기 3)으로 했다. 올림을 원하면 승인할 때 알려 준다.

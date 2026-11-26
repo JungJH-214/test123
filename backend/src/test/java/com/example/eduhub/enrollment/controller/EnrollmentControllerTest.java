@@ -1,13 +1,19 @@
 package com.example.eduhub.enrollment.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.example.eduhub.auth.config.JsonSecurityErrorHandler;
+import com.example.eduhub.auth.config.SecurityConfig;
 import com.example.eduhub.course.domain.Course;
 import com.example.eduhub.course.domain.CourseSession;
 import com.example.eduhub.course.exception.SessionClosedException;
@@ -24,14 +30,16 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
+@Import({SecurityConfig.class, JsonSecurityErrorHandler.class})
 @WebMvcTest(EnrollmentController.class)
 class EnrollmentControllerTest {
 
   private static final String URL = "/api/v1/sessions/1/enrollments";
-  private static final String HEADER = "X-Employee-Id";
 
   @Autowired private MockMvc mockMvc;
   @MockBean private EnrollmentCommandService enrollmentCommandService;
@@ -43,17 +51,17 @@ class EnrollmentControllerTest {
     given(enrollmentCommandService.enroll(1L, 7L)).willReturn(response(EnrollmentStatus.CONFIRMED));
 
     mockMvc
-        .perform(post(URL).header(HEADER, 7))
+        .perform(post(URL).with(employee()))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("CONFIRMED"))
         .andExpect(jsonPath("$.employeeId").value(7));
   }
 
   @Test
-  void enroll_passesPathAndHeaderToService() throws Exception {
+  void enroll_passesPathAndTokenSubjectToService() throws Exception {
     given(enrollmentCommandService.enroll(1L, 7L)).willReturn(response(EnrollmentStatus.CONFIRMED));
 
-    mockMvc.perform(post(URL).header(HEADER, 7)).andExpect(status().isCreated());
+    mockMvc.perform(post(URL).with(employee())).andExpect(status().isCreated());
 
     ArgumentCaptor<Long> sessionId = ArgumentCaptor.forClass(Long.class);
     ArgumentCaptor<Long> employeeId = ArgumentCaptor.forClass(Long.class);
@@ -63,33 +71,36 @@ class EnrollmentControllerTest {
   }
 
   @Test
+  void enroll_ignoresHeaderAndQueryEmployeeId_usesTokenSubject() throws Exception {
+    given(enrollmentCommandService.enroll(1L, 7L)).willReturn(response(EnrollmentStatus.CONFIRMED));
+
+    mockMvc
+        .perform(post(URL).param("employeeId", "99").header("X-Employee-Id", 99).with(employee()))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.employeeId").value(7));
+
+    verify(enrollmentCommandService).enroll(1L, 7L);
+    verify(enrollmentCommandService, never()).enroll(anyLong(), eq(99L));
+  }
+
+  @Test
   void enroll_waiting_returns201WithWaiting() throws Exception {
     given(enrollmentCommandService.enroll(1L, 7L)).willReturn(response(EnrollmentStatus.WAITING));
 
     mockMvc
-        .perform(post(URL).header(HEADER, 7))
+        .perform(post(URL).with(employee()))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("WAITING"));
   }
 
-  // ---- 400 ----
+  // ---- 401, 400 ----
 
   @Test
-  void enroll_missingHeader_returns400() throws Exception {
+  void enroll_noToken_returns401() throws Exception {
     mockMvc
         .perform(post(URL))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.code").value("MISSING_EMPLOYEE_ID"));
-
-    verifyNoInteractions(enrollmentCommandService);
-  }
-
-  @Test
-  void enroll_nonNumericHeader_returns400() throws Exception {
-    mockMvc
-        .perform(post(URL).header(HEADER, "abc"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.code").value("MISSING_EMPLOYEE_ID"));
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
 
     verifyNoInteractions(enrollmentCommandService);
   }
@@ -97,7 +108,7 @@ class EnrollmentControllerTest {
   @Test
   void enroll_nonNumericSessionId_returns400InvalidRequest() throws Exception {
     mockMvc
-        .perform(post("/api/v1/sessions/abc/enrollments").header(HEADER, 7))
+        .perform(post("/api/v1/sessions/abc/enrollments").with(employee()))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
 
@@ -111,7 +122,7 @@ class EnrollmentControllerTest {
     given(enrollmentCommandService.enroll(1L, 7L)).willThrow(new SessionNotFoundException(1L));
 
     mockMvc
-        .perform(post(URL).header(HEADER, 7))
+        .perform(post(URL).with(employee()))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("SESSION_NOT_FOUND"));
   }
@@ -121,7 +132,7 @@ class EnrollmentControllerTest {
     given(enrollmentCommandService.enroll(1L, 7L)).willThrow(new SessionClosedException(1L));
 
     mockMvc
-        .perform(post(URL).header(HEADER, 7))
+        .perform(post(URL).with(employee()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("SESSION_CLOSED"));
   }
@@ -132,7 +143,7 @@ class EnrollmentControllerTest {
         .willThrow(new DuplicateEnrollmentException(1L, 7L));
 
     mockMvc
-        .perform(post(URL).header(HEADER, 7))
+        .perform(post(URL).with(employee()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("ENROLLMENT_DUPLICATE"));
   }
@@ -142,9 +153,13 @@ class EnrollmentControllerTest {
     given(enrollmentCommandService.enroll(1L, 7L)).willThrow(new SessionFullException(1L));
 
     mockMvc
-        .perform(post(URL).header(HEADER, 7))
+        .perform(post(URL).with(employee()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("SESSION_FULL"));
+  }
+
+  private static SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor employee() {
+    return jwt().jwt(j -> j.subject("7").claim("role", "EMPLOYEE"));
   }
 
   private EnrollmentResponse response(EnrollmentStatus status) {
