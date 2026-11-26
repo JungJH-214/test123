@@ -83,7 +83,7 @@ class EnrollmentConcurrencyTest {
                 .collect(Collectors.toList()))
         .hasSize(10)
         .containsOnlyNulls();
-    assertWaitingNumbersFollowCreatedAtAndId(session.getId(), result);
+    assertWaitingNumbersFollowIdOrder(session.getId(), result);
   }
 
   @Test
@@ -119,18 +119,13 @@ class EnrollmentConcurrencyTest {
     assertThat(numbers).hasSize(5).containsExactlyInAnyOrder(1, 2, 3, 4, 5);
   }
 
-  /**
-   * R3: 응답 순번 순서가 D-04 순서(created_at, id 오름차순)와 같다.
-   *
-   * <p>한계: created_at은 애플리케이션 시각(LocalDateTime.now())이라 동시 신청에서 같은 값이 나올 수 있다. 그 경우 정렬은 사실상 id
-   * 순서이므로, 순번 계산이 락 밖으로 나가 id 순서와 어긋나는 회귀는 잡지만 시계와 락 순서가 어긋나는 경우는 검증하지 못한다 (설계명세 4절 "시계" 위험).
-   */
-  private void assertWaitingNumbersFollowCreatedAtAndId(Long sessionId, Result result) {
+  /** R3: 응답 순번 순서가 D-04 순서(같은 회차 WAITING 중 id 오름차순)와 같다. id는 회차 락을 잡은 뒤 발급되므로 실제 신청 순서다. */
+  private void assertWaitingNumbersFollowIdOrder(Long sessionId, Result result) {
     List<Long> dbOrder =
         entityManager
             .createQuery(
                 "select e from Enrollment e where e.session.id = :sid and e.status = :st"
-                    + " order by e.createdAt, e.id",
+                    + " order by e.id",
                 Enrollment.class)
             .setParameter("sid", sessionId)
             .setParameter("st", EnrollmentStatus.WAITING)

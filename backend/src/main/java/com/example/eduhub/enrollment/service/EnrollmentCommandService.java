@@ -21,8 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>규칙: 회차 행에 쓰기 락을 걸고 확정 수를 센 뒤 저장까지 한 트랜잭션에서 한다. 확정 수가 정원보다 적으면 확정, 정원이 찼으면 대기(정원의 50% 내림까지),
  * 대기도 차면 409 SESSION_FULL이다. 같은 회차에 이미 신청했으면 409 ENROLLMENT_DUPLICATE다. 종료된 회차는 409 SESSION_CLOSED,
- * 없는 회차는 404 SESSION_NOT_FOUND다. 시작일이 지난 회차도 막지 않는다. 대기 순번(FR-05, D-04)은 락 안에서 센 기존 대기 수 + 1이다. 같은
- * 회차 신청이 락으로 직렬화되어 새 대기가 항상 D-04 순서의 맨 뒤이기 때문이다.
+ * 없는 회차는 404 SESSION_NOT_FOUND다. 시작일이 지난 회차도 막지 않는다. 대기 순번(FR-05, D-04)은 락 안에서 센 기존 대기 수 + 1이다.
+ * D-04는 같은 회차 대기 중 신청 id 오름차순이고, id는 락을 잡은 뒤 저장할 때 발급되므로 새 대기는 항상 그 순서의 맨 뒤다.
  */
 @Service
 @RequiredArgsConstructor
