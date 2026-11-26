@@ -5,6 +5,7 @@ import com.example.eduhub.common.error.ErrorResponse;
 import com.example.eduhub.enrollment.dto.EnrollmentResponse;
 import com.example.eduhub.enrollment.service.EnrollmentCommandService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -54,7 +55,8 @@ public class EnrollmentController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping("/{sessionId}/enrollments")
   @ResponseStatus(HttpStatus.CREATED)
-  public EnrollmentResponse enroll(@PathVariable Long sessionId, @AuthenticationPrincipal Jwt jwt) {
+  public EnrollmentResponse enroll(
+      @PathVariable Long sessionId, @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
     return enrollmentCommandService.enroll(sessionId, CurrentUser.from(jwt).getEmployeeId());
   }
 }
