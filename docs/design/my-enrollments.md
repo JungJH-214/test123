@@ -13,7 +13,7 @@
 | FR-05 | 대기 순번을 알려 준다 | 순번은 저장하지 않고 조회할 때 계산한다. 이 API에서는 `WAITING`일 때만 값이 있다 |
 | NFR-02 | N+1 금지 | 과정, 회차, 대기 순번을 SQL 1개로 가져온다. 테스트로 SQL 수를 확인한다 |
 | NFR-03 | 인증 | 임직원 ID는 요청 파라미터가 아니라 JWT에서 꺼낸다: `CurrentUser.from(jwt).getEmployeeId()` |
-| D-04 (신규) | — | 대기 순번은 같은 회차의 `WAITING` 신청 사이에서 신청 일시(`created_at`) 오름차순, 같으면 `id` 오름차순으로 정한다 (개발자 승인) |
+| D-04 (신규) | — | 대기 순번은 같은 회차의 `WAITING` 신청 사이에서 `id` 오름차순으로 정한다 (개발자 승인). 처음에는 `created_at` 오름차순·동률 `id`로 정했으나, 최종 검토에서 `created_at`이 앱 서버 시계라 서버 여러 대·시계 역행 시 실제 순서와 어긋난다는 경고가 나와 바꿨다. `id`는 회차 락을 잡은 뒤 발급되어 같은 회차에서 실제 신청 순서와 같다 |
 
 ## 2. API
 `GET /api/me/enrollments?status={CONFIRMED|WAITING}`
@@ -52,8 +52,7 @@ select new com.example.eduhub.enrollment.repository.MyEnrollmentRow(
          (select count(w) from Enrollment w
            where w.session = s
              and w.status = com.example.eduhub.enrollment.domain.EnrollmentStatus.WAITING
-             and (w.createdAt < e.createdAt
-                  or (w.createdAt = e.createdAt and w.id < e.id))))
+             and w.id < e.id))
 from Enrollment e
   join e.session s
   join s.course c
@@ -96,7 +95,7 @@ CREATE INDEX idx_enrollment_employee_created ON enrollment (employee_id, created
 ## 6. 테스트
 | 종류 | 클래스 | 시나리오 |
 |---|---|---|
-| Repository (pgtest) | `EnrollmentRepositoryTest`에 추가 | 내 것만 나옴 / 상태 필터(`WAITING`, `CONFIRMED`, `null`=전체) / 같은 회차 대기 3명의 순번 0·1·2(앞선 수) / 다른 회차 대기자는 세지 않음 / `created_at`이 같으면 id 순 / 최근 신청순 정렬 / SQL 1개 |
+| Repository (pgtest) | `EnrollmentRepositoryTest`에 추가 | 내 것만 나옴 / 상태 필터(`WAITING`, `CONFIRMED`, `null`=전체) / 같은 회차 대기 3명의 순번 0·1·2(앞선 수) / 다른 회차 대기자는 세지 않음 / 순번은 `created_at`이 아니라 id 순 / 상태 필터를 걸어도 순번 유지 / 최근 신청순 정렬(같은 시각이면 id 내림차순) / SQL 1개 |
 | Service (Mockito) | `MyEnrollmentQueryServiceTest` | `WAITING`은 순번 = 앞선 수 + 1, `CONFIRMED`는 `null` / 상태 인자를 그대로 넘김 |
 | Controller (`@WebMvcTest`) | `EnrollmentControllerTest`에 추가 | 200과 `jsonPath` / JWT의 임직원 ID를 서비스에 넘김 / `status` 생략 시 `null` 전달 / `?status=FOO` → 400 `INVALID_REQUEST` / 토큰 없음 → 401 |
 | H2 | `EduhubApplicationTests` | V5 적용과 `ddl-auto: validate` |
@@ -110,3 +109,8 @@ CREATE INDEX idx_enrollment_employee_created ON enrollment (employee_id, created
 - **`:status is null` 바인딩:** PostgreSQL은 타입을 모르는 null 파라미터를 거부할 수 있다. pgtest에서 `status = null` 경우를 반드시 실행한다. 실패하면 상태 있는/없는 메서드 두 개로 나누고, 서비스가 하나를 골라 부른다 (그래도 SQL은 1개다)
 - **생성자 식 안의 서브쿼리:** Hibernate 5.6은 select 절 서브쿼리를 지원한다. 생성자 식에서 실패하면 인터페이스 프로젝션(`as` 별칭)으로 바꾼다
 - **병합 충돌:** NFR-03과 FR-08이 `EnrollmentController`, `EnrollmentControllerTest`, `EnrollmentRepository`를 함께 바꾼다. NFR-03 병합 뒤에 시작해 충돌을 줄인다
+
+## 8. 후속 작업 (최종 검토에서 넘김)
+- **FR-05:** 신청 응답의 대기 순번은 회차 단위 메서드(예: 같은 회차에서 id가 더 작은 WAITING 수)를 따로 만든다. `findMyEnrollments`는 임직원 단위라 재사용하지 않는다. 순번 규칙은 D-04(id 순) 하나만 쓴다
+- **FR-06:** 취소 뒤 승급 대상은 D-04와 같은 기준(같은 회차 WAITING 중 id가 가장 작은 신청)으로 고른다. 화면의 1번과 실제 승급 대상이 같은지 확인하는 테스트를 FR-06 완료 기준에 넣는다. 취소 후 재신청을 허용하면 새 id로 줄 맨 뒤에 서는지도 확인한다
+- **입력 경계:** `?status=`(빈 값)는 전체 조회, `status`를 여러 번 주면 첫 값만 쓴다
