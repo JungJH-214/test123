@@ -2,6 +2,7 @@ package com.example.eduhub.enrollment.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasKey;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -9,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -22,10 +24,15 @@ import com.example.eduhub.course.exception.SessionNotFoundException;
 import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import com.example.eduhub.enrollment.dto.EnrollmentResponse;
+import com.example.eduhub.enrollment.dto.MyEnrollmentResponse;
 import com.example.eduhub.enrollment.exception.DuplicateEnrollmentException;
 import com.example.eduhub.enrollment.exception.SessionFullException;
+import com.example.eduhub.enrollment.repository.MyEnrollmentRow;
 import com.example.eduhub.enrollment.service.EnrollmentCommandService;
+import com.example.eduhub.enrollment.service.MyEnrollmentQueryService;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collections;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +51,7 @@ class EnrollmentControllerTest {
 
   @Autowired private MockMvc mockMvc;
   @MockBean private EnrollmentCommandService enrollmentCommandService;
+  @MockBean private MyEnrollmentQueryService myEnrollmentQueryService;
 
   // ---- 성공 ----
 
@@ -160,6 +168,92 @@ class EnrollmentControllerTest {
         .perform(post(URL).with(employee()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("SESSION_FULL"));
+  }
+
+  // ---- 내 신청 내역 (FR-07) ----
+
+  private static final String ME_URL = "/api/me/enrollments";
+
+  @Test
+  void myEnrollments_returns200WithFields() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, null))
+        .willReturn(Collections.singletonList(myResponse(EnrollmentStatus.WAITING, 2L)));
+
+    mockMvc
+        .perform(get(ME_URL).with(employee()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].courseTitle").value("Java 기초"))
+        .andExpect(jsonPath("$[0].waitingNumber").value(3))
+        .andExpect(jsonPath("$[0].status").value("WAITING"));
+  }
+
+  @Test
+  void myEnrollments_usesEmployeeIdFromJwt() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, null)).willReturn(Collections.emptyList());
+
+    mockMvc
+        .perform(get(ME_URL).with(employee()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isEmpty());
+
+    verify(myEnrollmentQueryService).findMine(7L, null);
+  }
+
+  @Test
+  void myEnrollments_ignoresEmployeeIdQueryParam() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, null)).willReturn(Collections.emptyList());
+
+    mockMvc
+        .perform(get(ME_URL).param("employeeId", "99").header("X-Employee-Id", 99).with(employee()))
+        .andExpect(status().isOk());
+
+    verify(myEnrollmentQueryService).findMine(7L, null);
+    verify(myEnrollmentQueryService, never()).findMine(eq(99L), any());
+  }
+
+  @Test
+  void myEnrollments_withStatus_passesStatus() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, EnrollmentStatus.WAITING))
+        .willReturn(Collections.emptyList());
+
+    mockMvc
+        .perform(get(ME_URL).param("status", "WAITING").with(employee()))
+        .andExpect(status().isOk());
+
+    verify(myEnrollmentQueryService).findMine(7L, EnrollmentStatus.WAITING);
+  }
+
+  @Test
+  void myEnrollments_invalidStatus_returns400InvalidRequest() throws Exception {
+    mockMvc
+        .perform(get(ME_URL).param("status", "FOO").with(employee()))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+    verifyNoInteractions(myEnrollmentQueryService);
+  }
+
+  @Test
+  void myEnrollments_noToken_returns401() throws Exception {
+    mockMvc
+        .perform(get(ME_URL))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+    verifyNoInteractions(myEnrollmentQueryService);
+  }
+
+  private static MyEnrollmentResponse myResponse(EnrollmentStatus status, long preceding) {
+    return MyEnrollmentResponse.from(
+        new MyEnrollmentRow(
+            100L,
+            1L,
+            "Java 기초",
+            LocalDate.of(2026, 12, 1),
+            "본사",
+            status,
+            LocalDateTime.of(2026, 11, 1, 9, 0),
+            preceding));
   }
 
   private static SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor employee() {
