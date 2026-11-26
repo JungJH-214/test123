@@ -46,7 +46,7 @@ const { status, data } = await apiInstance.closeCourse(
 
 ### Authorization
 
-No authorization required
+[bearerAuth](../README.md#bearerAuth)
 
 ### HTTP request headers
 
@@ -57,9 +57,11 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**401** | 토큰 없음·무효 (UNAUTHORIZED) |  -  |
 |**400** | Bad Request |  -  |
 |**409** | Conflict |  -  |
 |**404** | 과정이 없음 (COURSE_NOT_FOUND) |  -  |
+|**403** | 관리자 권한 없음 (FORBIDDEN) |  -  |
 |**200** | 종료 성공 |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -102,7 +104,7 @@ const { status, data } = await apiInstance.closeSession(
 
 ### Authorization
 
-No authorization required
+[bearerAuth](../README.md#bearerAuth)
 
 ### HTTP request headers
 
@@ -113,9 +115,11 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**401** | 토큰 없음·무효 (UNAUTHORIZED) |  -  |
 |**400** | Bad Request |  -  |
 |**409** | Conflict |  -  |
 |**404** | 과정 또는 회차가 없음 (COURSE_NOT_FOUND, SESSION_NOT_FOUND) |  -  |
+|**403** | 관리자 권한 없음 (FORBIDDEN) |  -  |
 |**200** | 종료 성공 |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
@@ -156,7 +160,7 @@ const { status, data } = await apiInstance.createCourse(
 
 ### Authorization
 
-No authorization required
+[bearerAuth](../README.md#bearerAuth)
 
 ### HTTP request headers
 
@@ -167,10 +171,12 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**401** | 토큰 없음·무효 (UNAUTHORIZED) |  -  |
 |**400** | 입력값 오류 (VALIDATION_FAILED, INVALID_REQUEST) |  -  |
 |**409** | Conflict |  -  |
 |**404** | Not Found |  -  |
 |**201** | 등록 성공 |  -  |
+|**403** | 관리자 권한 없음 (FORBIDDEN) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -213,7 +219,7 @@ const { status, data } = await apiInstance.createSession(
 
 ### Authorization
 
-No authorization required
+[bearerAuth](../README.md#bearerAuth)
 
 ### HTTP request headers
 
@@ -224,10 +230,12 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**401** | 토큰 없음·무효 (UNAUTHORIZED) |  -  |
 |**400** | 입력값 오류 (VALIDATION_FAILED, INVALID_REQUEST) |  -  |
 |**409** | 종료된 과정 (COURSE_CLOSED) |  -  |
 |**404** | 과정이 없음 (COURSE_NOT_FOUND) |  -  |
 |**201** | 등록 성공 |  -  |
+|**403** | 관리자 권한 없음 (FORBIDDEN) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -270,7 +278,7 @@ const { status, data } = await apiInstance.updateCourse(
 
 ### Authorization
 
-No authorization required
+[bearerAuth](../README.md#bearerAuth)
 
 ### HTTP request headers
 
@@ -281,10 +289,12 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**401** | 토큰 없음·무효 (UNAUTHORIZED) |  -  |
 |**400** | 입력값 오류 (VALIDATION_FAILED, INVALID_REQUEST) |  -  |
 |**409** | 종료된 과정 (COURSE_CLOSED) |  -  |
 |**404** | 과정이 없음 (COURSE_NOT_FOUND) |  -  |
 |**200** | 수정 성공 |  -  |
+|**403** | 관리자 권한 없음 (FORBIDDEN) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -330,7 +340,7 @@ const { status, data } = await apiInstance.updateSession(
 
 ### Authorization
 
-No authorization required
+[bearerAuth](../README.md#bearerAuth)
 
 ### HTTP request headers
 
@@ -341,10 +351,12 @@ No authorization required
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
+|**401** | 토큰 없음·무효 (UNAUTHORIZED) |  -  |
 |**400** | 입력값 오류 (VALIDATION_FAILED, INVALID_REQUEST) |  -  |
 |**409** | 종료된 회차 (SESSION_CLOSED) |  -  |
 |**404** | 과정 또는 회차가 없음 (COURSE_NOT_FOUND, SESSION_NOT_FOUND) |  -  |
 |**200** | 수정 성공 |  -  |
+|**403** | 관리자 권한 없음 (FORBIDDEN) |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
