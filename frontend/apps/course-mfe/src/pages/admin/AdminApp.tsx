@@ -7,7 +7,7 @@ import { AdminCourseListPage } from './AdminCourseListPage';
  * - /admin → 과정 목록
  * - /admin/courses/{id} → 과정 상세와 회차 관리
  *
- * TODO(NFR-03): 인증이 들어오면 관리자만 들어올 수 있게 막는다.
+ * 관리자만 들어올 수 있게 App.tsx에서 `RequireAuth admin`으로 감싼다 (NFR-03).
  */
 export function AdminRoutes() {
   return (
