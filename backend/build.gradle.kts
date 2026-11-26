@@ -76,7 +76,7 @@ tasks.withType<Test> {
     doFirst {
         logger.lifecycle("pgtest DB: $pgTestDb")
         if (pgUser == null) {
-            logger.warn("POSTGRES_USER가 없어 pgtest DB 자동 생성을 건너뛴다 (.env를 worktree 루트에 두었는지 확인)")
+            logger.warn("pgtest DB: POSTGRES_USER not set, skipping auto-create (copy .env to the worktree root)")
             return@doFirst
         }
         try {
@@ -100,14 +100,14 @@ tasks.withType<Test> {
                         conn.createStatement().use {
                             it.execute("CREATE DATABASE \"" + pgTestDb.replace("\"", "\"\"") + "\"")
                         }
-                        logger.lifecycle("pgtest DB 생성: $pgTestDb")
+                        logger.lifecycle("pgtest DB created: $pgTestDb")
                     } catch (e: SQLException) {
                         if (e.sqlState != "42P04") throw e // 42P04: 동시에 다른 실행이 먼저 만든 경우
                     }
                 }
             }
         } catch (e: Exception) {
-            logger.warn("pgtest DB 자동 생성 실패 ($pgTestDb): ${e.message}. pgtest 테스트가 실패할 수 있다")
+            logger.warn("pgtest DB auto-create failed ($pgTestDb): ${e.message}")
         }
     }
 }
