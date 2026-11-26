@@ -57,6 +57,7 @@ class EnrollmentCommandServiceTest {
     assertThat(captor.getValue().getSession()).isSameAs(session);
     assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
     assertThat(response.getSessionId()).isEqualTo(SESSION_ID);
+    assertThat(response.getWaitingNumber()).isNull();
     verify(enrollmentRepository, never())
         .countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.WAITING);
   }
@@ -70,6 +71,19 @@ class EnrollmentCommandServiceTest {
     EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
 
     assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(response.getWaitingNumber()).isEqualTo(5);
+  }
+
+  @Test
+  void enroll_capacityFullNoWaiting_waitingNumberOne() {
+    givenSession(10);
+    givenCounts(10, 0);
+    givenSaveReturnsArgument();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(response.getWaitingNumber()).isEqualTo(1);
   }
 
   @Test

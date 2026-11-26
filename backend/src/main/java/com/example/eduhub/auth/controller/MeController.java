@@ -5,6 +5,7 @@ import com.example.eduhub.auth.dto.UserResponse;
 import com.example.eduhub.auth.service.AuthService;
 import com.example.eduhub.common.error.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -30,7 +31,7 @@ public class MeController {
       description = "토큰 없음·무효, 사원 없음 (UNAUTHORIZED)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @GetMapping("/api/me")
-  public UserResponse me(@AuthenticationPrincipal Jwt jwt) {
+  public UserResponse me(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
     return authService.me(CurrentUser.from(jwt).getEmployeeId());
   }
 }
