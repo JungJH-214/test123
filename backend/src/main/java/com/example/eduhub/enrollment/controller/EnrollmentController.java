@@ -39,7 +39,9 @@ public class EnrollmentController {
   private final MyEnrollmentQueryService myEnrollmentQueryService;
 
   @Operation(summary = "수강 신청 (정원 안이면 확정, 정원이 차면 대기)")
-  @ApiResponse(responseCode = "201", description = "신청 성공 (status: CONFIRMED 또는 WAITING)")
+  @ApiResponse(
+      responseCode = "201",
+      description = "신청 성공 (status: CONFIRMED, 또는 WAITING과 waitingNumber)")
   @ApiResponse(
       responseCode = "400",
       description = "경로 값 형식 오류 (INVALID_REQUEST)",
@@ -58,7 +60,8 @@ public class EnrollmentController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping("/api/v1/sessions/{sessionId}/enrollments")
   @ResponseStatus(HttpStatus.CREATED)
-  public EnrollmentResponse enroll(@PathVariable Long sessionId, @AuthenticationPrincipal Jwt jwt) {
+  public EnrollmentResponse enroll(
+      @PathVariable Long sessionId, @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
     return enrollmentCommandService.enroll(sessionId, CurrentUser.from(jwt).getEmployeeId());
   }
 

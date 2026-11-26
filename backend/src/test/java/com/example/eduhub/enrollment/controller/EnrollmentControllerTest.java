@@ -1,6 +1,7 @@
 package com.example.eduhub.enrollment.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasKey;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -62,7 +63,9 @@ class EnrollmentControllerTest {
         .perform(post(URL).with(employee()))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("CONFIRMED"))
-        .andExpect(jsonPath("$.employeeId").value(7));
+        .andExpect(jsonPath("$.employeeId").value(7))
+        .andExpect(jsonPath("$", hasKey("waitingNumber")))
+        .andExpect(jsonPath("$.waitingNumber").isEmpty());
   }
 
   @Test
@@ -93,12 +96,13 @@ class EnrollmentControllerTest {
 
   @Test
   void enroll_waiting_returns201WithWaiting() throws Exception {
-    given(enrollmentCommandService.enroll(1L, 7L)).willReturn(response(EnrollmentStatus.WAITING));
+    given(enrollmentCommandService.enroll(1L, 7L)).willReturn(waitingResponse(3));
 
     mockMvc
         .perform(post(URL).with(employee()))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.status").value("WAITING"));
+        .andExpect(jsonPath("$.status").value("WAITING"))
+        .andExpect(jsonPath("$.waitingNumber").value(3));
   }
 
   // ---- 401, 400 ----
@@ -257,11 +261,19 @@ class EnrollmentControllerTest {
   }
 
   private EnrollmentResponse response(EnrollmentStatus status) {
+    return EnrollmentResponse.from(enrollment(status));
+  }
+
+  private EnrollmentResponse waitingResponse(int waitingNumber) {
+    return EnrollmentResponse.waiting(enrollment(EnrollmentStatus.WAITING), waitingNumber);
+  }
+
+  private Enrollment enrollment(EnrollmentStatus status) {
     Course course = Course.create("Java 기초", "개발", "입문");
     CourseSession session = CourseSession.create(course, LocalDate.of(2026, 12, 1), "본사", 10);
     ReflectionTestUtils.setField(session, "id", 1L);
     Enrollment enrollment = Enrollment.create(session, 7L, status);
     ReflectionTestUtils.setField(enrollment, "id", 100L);
-    return EnrollmentResponse.from(enrollment);
+    return enrollment;
   }
 }
