@@ -39,6 +39,16 @@ class OpenApiDocsTest {
   }
 
   @Test
+  void apiDocs_myEnrollments_onlyStatusParameter() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.paths['/api/me/enrollments'].get.parameters[*].name")
+                .value(contains("status")));
+  }
+
+  @Test
   void apiDocs_me_hasNoParameters() throws Exception {
     mockMvc
         .perform(get("/v3/api-docs"))

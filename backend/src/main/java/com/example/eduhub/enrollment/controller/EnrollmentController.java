@@ -77,7 +77,7 @@ public class EnrollmentController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @GetMapping("/api/me/enrollments")
   public List<MyEnrollmentResponse> myEnrollments(
-      @AuthenticationPrincipal Jwt jwt,
+      @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
       @Parameter(description = "신청 상태. 생략하면 전체") @RequestParam(required = false)
           EnrollmentStatus status) {
     return myEnrollmentQueryService.findMine(CurrentUser.from(jwt).getEmployeeId(), status);
