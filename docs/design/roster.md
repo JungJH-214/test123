@@ -84,8 +84,8 @@
   - FR-08: 회차 하나만 보므로 `order by e.id`로 정렬한 뒤 서비스에서 1부터 번호를 매긴다. 기준이 같아서 두 화면의 순번이 일치한다
 - **COMPLETED:** FR-08이 `EnrollmentStatus`에 추가한다. FR-07은 상태 enum을 그대로 돌려주고 `?status=`로 거르기만 하므로 코드를 바꿀 필요가 없다
 
-## 5-1. FR-06과 합칠 때 맞출 지점 (2026-11-27, FR-06 미병합)
-FR-06(`feature/fr-06-cancel`)과 어느 쪽이 먼저 병합될지는 정해지지 않았다. 나중에 병합하는 쪽이 아래를 확인한다.
+## 5-1. FR-06과 합칠 때 맞출 지점 (2026-11-27)
+FR-06(PR #12, `c9bfb6c`)이 먼저 병합되어 FR-08 브랜치에 origin/main을 병합하면서 아래를 반영했다. 같은 임직원의 여러 신청을 실제 DB로 검증하는 pgtest(W-3)와 동시성 pgtest(W-4)는 병합 커밋 뒤에 이어서 추가한다. 다만 `Clock` 빈을 auth `SecurityConfig`에서 common으로 옮기는 일(FR-06 검토 권장)은 이번 범위에 넣지 않았다.
 - **정원 집계:** FR-06은 신청 판정(`decide`)과 승급(`fillSeatsFromWaiting`)이 함께 쓰는 private `countSeatsTaken(sessionId)`를 둔다. D-05에 따라 **이 메서드 하나**가 CONFIRMED와 COMPLETED를 함께 세게 바꾼다. `decide`만 바꾸면 승급 기준이 갈라져 정원 초과 승급이 생긴다.
 - **CANCELLED 사유:** `CompletionFailureReason`에 `CANCELLED`를 추가하고, `RosterService.complete`의 "그 밖의 상태" 분기를 CANCELLED 사유로 바꾼다. 같은 임직원의 신청이 여러 건이면 ID가 큰 쪽(최신 신청)을 쓰는 규칙은 그대로 둔다. 취소 후 재신청 건이 있으면 그 건이 선택된다.
 - **명단 필터:** `findRosterRows`는 CONFIRMED, COMPLETED, WAITING만 고르므로 CANCELLED는 자동으로 빠진다. 이를 검증하는 pgtest를 추가한다.

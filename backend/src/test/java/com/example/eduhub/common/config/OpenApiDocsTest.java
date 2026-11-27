@@ -49,6 +49,16 @@ class OpenApiDocsTest {
   }
 
   @Test
+  void apiDocs_cancel_onlyEnrollmentIdParameter() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.paths['/api/me/enrollments/{enrollmentId}/cancel'].post.parameters[*].name")
+                .value(contains("enrollmentId")));
+  }
+
+  @Test
   void apiDocs_me_hasNoParameters() throws Exception {
     mockMvc
         .perform(get("/v3/api-docs"))

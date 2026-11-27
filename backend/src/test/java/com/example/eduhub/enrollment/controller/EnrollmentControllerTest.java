@@ -25,7 +25,11 @@ import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import com.example.eduhub.enrollment.dto.EnrollmentResponse;
 import com.example.eduhub.enrollment.dto.MyEnrollmentResponse;
+import com.example.eduhub.enrollment.exception.CancelDeadlinePassedException;
 import com.example.eduhub.enrollment.exception.DuplicateEnrollmentException;
+import com.example.eduhub.enrollment.exception.EnrollmentAlreadyCancelledException;
+import com.example.eduhub.enrollment.exception.EnrollmentNotCancellableException;
+import com.example.eduhub.enrollment.exception.EnrollmentNotFoundException;
 import com.example.eduhub.enrollment.exception.SessionFullException;
 import com.example.eduhub.enrollment.repository.MyEnrollmentRow;
 import com.example.eduhub.enrollment.service.EnrollmentCommandService;
@@ -241,6 +245,118 @@ class EnrollmentControllerTest {
         .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
 
     verifyNoInteractions(myEnrollmentQueryService);
+  }
+
+  // ---- 신청 취소 (FR-06) ----
+
+  private static final String CANCEL_URL = "/api/me/enrollments/100/cancel";
+
+  @Test
+  void cancel_returns200Cancelled() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willReturn(response(EnrollmentStatus.CANCELLED));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("CANCELLED"))
+        .andExpect(jsonPath("$", hasKey("waitingNumber")))
+        .andExpect(jsonPath("$.waitingNumber").isEmpty());
+
+    ArgumentCaptor<Long> enrollmentId = ArgumentCaptor.forClass(Long.class);
+    ArgumentCaptor<Long> employeeId = ArgumentCaptor.forClass(Long.class);
+    verify(enrollmentCommandService).cancel(enrollmentId.capture(), employeeId.capture());
+    assertThat(enrollmentId.getValue()).isEqualTo(100L);
+    assertThat(employeeId.getValue()).isEqualTo(7L);
+  }
+
+  @Test
+  void cancel_ignoresEmployeeIdParamAndHeader_usesTokenSubject() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willReturn(response(EnrollmentStatus.CANCELLED));
+
+    mockMvc
+        .perform(
+            post(CANCEL_URL).param("employeeId", "99").header("X-Employee-Id", 99).with(employee()))
+        .andExpect(status().isOk());
+
+    verify(enrollmentCommandService).cancel(100L, 7L);
+    verify(enrollmentCommandService, never()).cancel(anyLong(), eq(99L));
+  }
+
+  @Test
+  void cancel_noToken_returns401() throws Exception {
+    mockMvc
+        .perform(post(CANCEL_URL))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+    verifyNoInteractions(enrollmentCommandService);
+  }
+
+  @Test
+  void cancel_nonNumericId_returns400InvalidRequest() throws Exception {
+    mockMvc
+        .perform(post("/api/me/enrollments/abc/cancel").with(employee()))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+    verifyNoInteractions(enrollmentCommandService);
+  }
+
+  @Test
+  void cancel_notFound_returns404() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new EnrollmentNotFoundException(100L));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_NOT_FOUND"));
+  }
+
+  @Test
+  void cancel_alreadyCancelled_returns409() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new EnrollmentAlreadyCancelledException(100L));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_ALREADY_CANCELLED"));
+  }
+
+  @Test
+  void cancel_notCancellable_returns409() throws Exception {
+    // HTTP 매핑만 확인한다. 실제로 이 예외가 나는 상태(FR-08의 수료 등)는 아직 없어 상태 값은 의미가 없다.
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new EnrollmentNotCancellableException(100L, EnrollmentStatus.CONFIRMED));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_NOT_CANCELLABLE"));
+  }
+
+  @Test
+  void cancel_deadlinePassed_returns409() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new CancelDeadlinePassedException(LocalDate.of(2026, 12, 1)));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("CANCEL_DEADLINE_PASSED"));
+  }
+
+  @Test
+  void cancel_sessionClosed_returns409() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L)).willThrow(new SessionClosedException(1L));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("SESSION_CLOSED"));
   }
 
   private static MyEnrollmentResponse myResponse(EnrollmentStatus status, long preceding) {

@@ -67,6 +67,24 @@ class EnrollmentRosterRepositoryTest {
   }
 
   @Test
+  void findRosterRows_excludesCancelled() {
+    CourseSession session = newSession();
+    Employee e1 = newEmployee("R-0021", "김하나");
+    Employee e2 = newEmployee("R-0022", "이둘");
+    Employee e3 = newEmployee("R-0023", "박셋");
+    em.persist(Enrollment.create(session, e1.getId(), EnrollmentStatus.CANCELLED));
+    Enrollment kept =
+        em.persist(Enrollment.create(session, e2.getId(), EnrollmentStatus.CONFIRMED));
+    em.persist(Enrollment.create(session, e3.getId(), EnrollmentStatus.CANCELLED));
+    em.flush();
+    em.clear();
+
+    List<RosterRow> rows = enrollmentRepository.findRosterRows(session.getId());
+
+    assertThat(rows).extracting(RosterRow::getEnrollmentId).containsExactly(kept.getId());
+  }
+
+  @Test
   void findRosterRows_excludesOtherSessions() {
     CourseSession a = newSession();
     CourseSession b = newSession();

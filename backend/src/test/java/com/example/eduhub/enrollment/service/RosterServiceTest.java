@@ -277,6 +277,40 @@ class RosterServiceTest {
   }
 
   @Test
+  void complete_onlyCancelled_failsWithCancelled() {
+    givenLockedSession();
+    Enrollment cancelled = enrollment(1L, EnrollmentStatus.CANCELLED);
+    given(enrollmentRepository.findBySessionIdAndEmployeeIdIn(eq(SESSION_ID), any()))
+        .willReturn(Collections.singletonList(cancelled));
+
+    CompletionResponse response = service.complete(SESSION_ID, Collections.singletonList(1L));
+
+    assertThat(response.getCompleted()).isEmpty();
+    assertThat(response.getFailed())
+        .extracting(CompletionFailure::getEmployeeId, CompletionFailure::getReason)
+        .containsExactly(tuple(1L, CompletionFailureReason.CANCELLED));
+    assertThat(cancelled.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void complete_cancelledThenReenrolled_completesLatestEnrollment() {
+    givenLockedSession();
+    Enrollment cancelled = enrollment(1L, EnrollmentStatus.CANCELLED);
+    ReflectionTestUtils.setField(cancelled, "id", 10L);
+    Enrollment reenrolled = enrollment(1L, EnrollmentStatus.CONFIRMED);
+    ReflectionTestUtils.setField(reenrolled, "id", 20L);
+    given(enrollmentRepository.findBySessionIdAndEmployeeIdIn(eq(SESSION_ID), any()))
+        .willReturn(Arrays.asList(reenrolled, cancelled));
+
+    CompletionResponse response = service.complete(SESSION_ID, Collections.singletonList(1L));
+
+    assertThat(response.getCompleted()).containsExactly(1L);
+    assertThat(response.getFailed()).isEmpty();
+    assertThat(reenrolled.getStatus()).isEqualTo(EnrollmentStatus.COMPLETED);
+    assertThat(cancelled.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
   void complete_endedSession_isAllowed() {
     useClock("2027-03-01T00:00:00Z");
     givenLockedSession();

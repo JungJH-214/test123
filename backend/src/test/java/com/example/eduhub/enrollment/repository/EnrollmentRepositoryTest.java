@@ -251,7 +251,7 @@ class EnrollmentRepositoryTest {
   }
 
   @Test
-  void existsBySessionIdAndEmployeeId_trueOnlyForSameSessionAndEmployee() {
+  void existsBySessionIdAndEmployeeIdAndStatusNot_trueOnlyForSameSessionAndEmployee() {
     Course course = em.persist(Course.create("Java 기초", "개발", null));
     CourseSession a = newSession(course);
     CourseSession b = newSession(course);
@@ -259,9 +259,89 @@ class EnrollmentRepositoryTest {
     em.flush();
     em.clear();
 
-    assertThat(enrollmentRepository.existsBySessionIdAndEmployeeId(a.getId(), 1L)).isTrue();
-    assertThat(enrollmentRepository.existsBySessionIdAndEmployeeId(a.getId(), 2L)).isFalse();
-    assertThat(enrollmentRepository.existsBySessionIdAndEmployeeId(b.getId(), 1L)).isFalse();
+    assertThat(existsActive(a.getId(), 1L)).isTrue();
+    assertThat(existsActive(a.getId(), 2L)).isFalse();
+    assertThat(existsActive(b.getId(), 1L)).isFalse();
+  }
+
+  private boolean existsActive(Long sessionId, Long employeeId) {
+    return enrollmentRepository.existsBySessionIdAndEmployeeIdAndStatusNot(
+        sessionId, employeeId, EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void findSessionIdByIdAndEmployeeId_owner_returnsSessionId() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession a = newSession(course);
+    Enrollment e = em.persist(Enrollment.create(a, 1L, EnrollmentStatus.CONFIRMED));
+    em.flush();
+    em.clear();
+
+    assertThat(enrollmentRepository.findSessionIdByIdAndEmployeeId(e.getId(), 1L))
+        .contains(a.getId());
+  }
+
+  @Test
+  void findSessionIdByIdAndEmployeeId_otherEmployee_empty() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession a = newSession(course);
+    Enrollment e = em.persist(Enrollment.create(a, 1L, EnrollmentStatus.CONFIRMED));
+    em.flush();
+    em.clear();
+
+    assertThat(enrollmentRepository.findSessionIdByIdAndEmployeeId(e.getId(), 2L)).isEmpty();
+  }
+
+  @Test
+  void findFirstBySessionIdAndStatusOrderByIdAsc_returnsSmallestIdWaiting() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession a = newSession(course);
+    CourseSession b = newSession(course);
+    // 다른 회차·다른 상태를 먼저 저장해 더 작은 ID를 갖게 한다. 시각은 ID 순서와 반대로 둔다.
+    em.persist(Enrollment.create(b, 9L, EnrollmentStatus.WAITING));
+    em.persist(Enrollment.create(a, 8L, EnrollmentStatus.CONFIRMED));
+    em.persist(Enrollment.create(a, 7L, EnrollmentStatus.CANCELLED));
+    Enrollment first = saveAt(a, 1L, EnrollmentStatus.WAITING, BASE.plusMinutes(10));
+    saveAt(a, 2L, EnrollmentStatus.WAITING, BASE);
+    saveAt(a, 3L, EnrollmentStatus.WAITING, BASE.plusMinutes(5));
+    em.flush();
+    em.clear();
+
+    assertThat(
+            enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
+                a.getId(), EnrollmentStatus.WAITING))
+        .hasValueSatisfying(e -> assertThat(e.getId()).isEqualTo(first.getId()));
+  }
+
+  @Test
+  void existsBySessionIdAndEmployeeIdAndStatusNot_cancelledOnly_false() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession a = newSession(course);
+    em.persist(Enrollment.create(a, 1L, EnrollmentStatus.CANCELLED));
+    em.persist(Enrollment.create(a, 2L, EnrollmentStatus.WAITING));
+    em.flush();
+    em.clear();
+
+    assertThat(
+            enrollmentRepository.existsBySessionIdAndEmployeeIdAndStatusNot(
+                a.getId(), 1L, EnrollmentStatus.CANCELLED))
+        .isFalse();
+    assertThat(
+            enrollmentRepository.existsBySessionIdAndEmployeeIdAndStatusNot(
+                a.getId(), 2L, EnrollmentStatus.CANCELLED))
+        .isTrue();
+  }
+
+  @Test
+  void cancelledThenReenroll_partialUniqueIndexAllows() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession a = newSession(course);
+    em.persist(Enrollment.create(a, 1L, EnrollmentStatus.CANCELLED));
+    Enrollment again = em.persist(Enrollment.create(a, 1L, EnrollmentStatus.WAITING));
+
+    em.flush();
+
+    assertThat(again.getId()).isNotNull();
   }
 
   @Test

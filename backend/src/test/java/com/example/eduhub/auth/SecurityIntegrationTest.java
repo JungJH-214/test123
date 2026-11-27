@@ -17,6 +17,7 @@ import com.example.eduhub.course.dto.CourseRequest;
 import com.example.eduhub.course.repository.CourseRepository;
 import com.example.eduhub.course.repository.CourseSessionRepository;
 import com.example.eduhub.enrollment.domain.Enrollment;
+import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -189,6 +190,25 @@ class SecurityIntegrationTest {
     List<Enrollment> saved = enrollmentRepository.findAll();
     assertThat(saved).hasSize(1);
     assertThat(saved.get(0).getEmployeeId()).isEqualTo(employee.getId());
+  }
+
+  @Test
+  void cancel_otherEmployeesEnrollment_returns404AndKeepsStatus() throws Exception {
+    String hash = passwordEncoder.encode(PASSWORD);
+    employeeRepository.save(Employee.create("T0002", "다른사원", hash, Role.EMPLOYEE));
+    Enrollment enrollmentOfA =
+        enrollmentRepository.save(
+            Enrollment.create(session, employee.getId(), EnrollmentStatus.CONFIRMED));
+
+    mockMvc
+        .perform(
+            post("/api/me/enrollments/{id}/cancel", enrollmentOfA.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + login("T0002", PASSWORD)))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_NOT_FOUND"));
+
+    assertThat(enrollmentRepository.findById(enrollmentOfA.getId()).get().getStatus())
+        .isEqualTo(EnrollmentStatus.CONFIRMED);
   }
 
   @Test

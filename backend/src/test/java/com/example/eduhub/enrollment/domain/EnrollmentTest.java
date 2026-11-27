@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.eduhub.course.domain.Course;
 import com.example.eduhub.course.domain.CourseSession;
+import com.example.eduhub.enrollment.exception.EnrollmentAlreadyCancelledException;
+import com.example.eduhub.enrollment.exception.EnrollmentNotCancellableException;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
@@ -38,5 +40,71 @@ class EnrollmentTest {
     Enrollment enrollment = enrollment(EnrollmentStatus.COMPLETED);
 
     assertThatThrownBy(enrollment::complete).isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void cancel_confirmed_cancelled() {
+    Enrollment e = enrollment(EnrollmentStatus.CONFIRMED);
+
+    e.cancel();
+
+    assertThat(e.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void cancel_waiting_cancelled() {
+    Enrollment e = enrollment(EnrollmentStatus.WAITING);
+
+    e.cancel();
+
+    assertThat(e.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void cancel_cancelled_throwsAlreadyCancelled() {
+    Enrollment e = enrollment(EnrollmentStatus.CANCELLED);
+
+    assertThatThrownBy(e::cancel)
+        .isInstanceOf(EnrollmentAlreadyCancelledException.class)
+        .extracting("code")
+        .isEqualTo("ENROLLMENT_ALREADY_CANCELLED");
+    assertThat(e.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void confirmFromWaiting_waiting_confirmed() {
+    Enrollment e = enrollment(EnrollmentStatus.WAITING);
+
+    e.confirmFromWaiting();
+
+    assertThat(e.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(e.isConfirmed()).isTrue();
+  }
+
+  @Test
+  void confirmFromWaiting_confirmed_throws() {
+    Enrollment e = enrollment(EnrollmentStatus.CONFIRMED);
+
+    assertThatThrownBy(e::confirmFromWaiting).isInstanceOf(IllegalStateException.class);
+    assertThat(e.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+  }
+
+  @Test
+  void confirmFromWaiting_cancelled_throws() {
+    Enrollment e = enrollment(EnrollmentStatus.CANCELLED);
+
+    assertThatThrownBy(e::confirmFromWaiting).isInstanceOf(IllegalStateException.class);
+    assertThat(e.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void cancel_completed_throwsNotCancellable() {
+    Enrollment e = enrollment(EnrollmentStatus.COMPLETED);
+
+    assertThatThrownBy(e::cancel)
+        .isInstanceOf(EnrollmentNotCancellableException.class)
+        .extracting("code")
+        .isEqualTo("ENROLLMENT_NOT_CANCELLABLE");
+    assertThat(e.getStatus()).isEqualTo(EnrollmentStatus.COMPLETED);
   }
 }
