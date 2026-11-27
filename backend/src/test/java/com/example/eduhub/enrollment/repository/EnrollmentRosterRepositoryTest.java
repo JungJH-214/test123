@@ -8,7 +8,6 @@ import com.example.eduhub.course.domain.Course;
 import com.example.eduhub.course.domain.CourseSession;
 import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
-import com.example.eduhub.enrollment.dto.RosterRow;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;

@@ -229,6 +229,26 @@ class SecurityIntegrationTest {
   }
 
   @Test
+  void adminRoster_employeeToken_returns403() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/sessions/{id}/roster", session.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + login(EMP_NO, PASSWORD)))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  void adminRoster_adminToken_returns200() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/sessions/{id}/roster", session.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + login(ADMIN_NO, PASSWORD)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.sessionId").value(session.getId()));
+  }
+
+  @Test
   void getCourses_noToken_returns200() throws Exception {
     mockMvc.perform(get("/api/v1/courses")).andExpect(status().isOk());
   }

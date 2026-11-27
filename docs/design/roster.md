@@ -2,7 +2,7 @@
 
 - 상태: 승인됨 (2026-11-26)
 - 구현계획: `docs/plans/fr-08.md`
-- 선행 조건: NFR-03(PR #7: JWT, `/api/admin/**` ADMIN 규칙, `Clock` 빈, V4 employee)과 FR-05(PR #9: 대기 순번, D-04)가 병합된 main `1be9e3d`에서 시작했다. FR-07은 아직 병합되지 않았다(5장)
+- 선행 조건: NFR-03(PR #7: JWT, `/api/admin/**` ADMIN 규칙, `Clock` 빈, V4 employee)과 FR-05(PR #9: 대기 순번, D-04)가 병합된 main `1be9e3d`에서 시작했다. 이후 FR-07(PR #10, `61f35a0`)이 먼저 병합되어 브랜치에 origin/main을 병합했다(5장)
 - 범위 밖: 화면, 알림(FR-09), FR-06 취소·승급
 - 관련: FR-08, D-02, D-03, NFR-03, NFR-04, NFR-05
 
@@ -61,7 +61,7 @@
 - **상태 추가:** `EnrollmentStatus`에 `COMPLETED`를 추가한다. `status`는 VARCHAR(20)이고 CHECK 제약이 없어서 **마이그레이션이 필요 없다**.
 - **부분 유일 인덱스:** 조건이 `status <> 'CANCELLED'`라서 COMPLETED도 중복 방지 대상이다. 수료한 사람은 같은 회차에 다시 신청할 수 없고, 의도한 동작이다. 인덱스는 바꾸지 않는다.
 - **상태 변경 메서드:** `Enrollment.complete()`를 추가한다. CONFIRMED가 아니면 `IllegalStateException`을 던진다. 서비스가 상태를 미리 거르므로, 이 예외는 방어용이다.
-- **정원 집계 (D-05):** `EnrollmentCommandService.decideStatus`가 확정 수를 셀 때 `countBySessionIdAndStatusIn(id, [CONFIRMED, COMPLETED])`를 쓴다. 이렇게 해야 수료 처리 뒤에도 자리가 비지 않는다. FR-06 승급 로직도 같은 기준을 써야 한다(FR-06 세션에 전달).
+- **정원 집계 (D-05):** `EnrollmentCommandService.decide`(FR-05에서 `decideStatus`가 바뀐 이름)가 확정 수를 셀 때 `countBySessionIdAndStatusIn(id, [CONFIRMED, COMPLETED])`를 쓴다. 이렇게 해야 수료 처리 뒤에도 자리가 비지 않는다. FR-06 승급 로직도 같은 기준을 써야 한다(FR-06 세션에 전달).
 
 ## 3. 동시성 (CLAUDE.md 규칙 6)
 - **회차 락:** 수료 처리는 정원 수를 바꾸지 않는다. CONFIRMED에서 COMPLETED로 바뀌어도 둘 다 정원에 들어간다(D-05). 그래도 `CourseSessionRepository.findByIdForUpdate`로 **회차 행 락**을 건다. 근거는 이렇다.
@@ -78,7 +78,7 @@
 
 ## 5. FR-07과 겹치는 부분
 - **겹치는 파일:** `EnrollmentRepository`, `EnrollmentStatus`, 대기 순번 계산
-- **권장 병합 순서:** FR-07을 먼저 병합한다. 나중에 병합하는 쪽이 `EnrollmentRepository`의 충돌을 정리한다(양쪽 모두 메서드만 추가한다).
+- **병합 결과 (2026-11-27):** FR-07이 먼저 병합되었다. FR-08 브랜치에 origin/main(`61f35a0`)을 병합하면서 `EnrollmentRepository`(양쪽 메서드 유지), `EnrollmentRepositoryTest`(import 합침), `requirements.md`(D-04 다음에 D-05)의 충돌을 정리했다. 명단 projection `RosterRow`는 FR-07의 `MyEnrollmentRow`처럼 `repository` 패키지에 둔다.
 - **대기 순번 (FR-07과 합의, 2026-11-27 갱신):** FR-07의 새 D-04를 따른다. 같은 회차의 WAITING 신청 사이에서 **신청 ID 오름차순**으로 순번을 정하고, `created_at`은 쓰지 않는다. `created_at`은 앱 서버 시계라 서버가 여러 대이거나 시계가 뒤로 가면 실제 순서와 어긋난다. 반면 id는 회차 락을 잡은 뒤 발급되므로 같은 회차 안에서는 실제 신청 순서와 같다.
   - FR-07: 공유할 Java 헬퍼가 없다. `findMyEnrollments`의 JPQL 상관 서브쿼리로 순번을 센다
   - FR-08: 회차 하나만 보므로 `order by e.id`로 정렬한 뒤 서비스에서 1부터 번호를 매긴다. 기준이 같아서 두 화면의 순번이 일치한다
@@ -92,6 +92,24 @@ FR-06(`feature/fr-06-cancel`)과 어느 쪽이 먼저 병합될지는 정해지�
 - **중복 확인:** FR-06은 `existsBySessionIdAndEmployeeId`를 지우고 `existsBySessionIdAndEmployeeIdAndStatusNot(..., CANCELLED)`로 바꿨다. FR-08은 이 메서드를 쓰지 않는다.
 - **취소 제한:** FR-06의 `Enrollment.checkCancellable()`은 COMPLETED 취소를 막는다(`ENROLLMENT_NOT_CANCELLABLE`). D-05와 충돌하지 않는다.
 - **락 순서:** 두 기능 모두 회차 행 락을 먼저 잡는다.
+- **`EnrollmentTest` 양쪽 신규 파일 (최종 검토 W-1):** FR-06과 FR-08이 `backend/src/test/java/com/example/eduhub/enrollment/domain/EnrollmentTest.java`를 각자 새로 만들었다. 병합할 때 한쪽 테스트가 통째로 사라지지 않게 두 파일의 테스트를 합친다.
+- **FR-06 테스트 스텁 (W-1):** FR-06 `EnrollmentCommandServiceTest`는 `countBySessionIdAndStatus(SESSION_ID, CONFIRMED)`를 스텁한다. `countSeatsTaken`을 `countBySessionIdAndStatusIn`으로 바꿀 때 아래 두 가지를 고친다.
+  - 스텁을 FR-08의 `isSeatStatuses()` argThat 방식으로 옮긴다.
+  - `verify(..., never()).countBySessionIdAndStatus(any(), any())` 같은 검증은 새 메서드 이름으로는 아무것도 걸러내지 못한 채 통과한다. 그래서 `countBySessionIdAndStatusIn`도 검증 대상에 넣는다.
+- **시간대 상수 하나로 (W-1):** FR-06 `EnrollmentCommandService`의 `BUSINESS_ZONE`을 `common/time/BusinessTime.ZONE`으로 바꾼다. 지금은 D-01 취소 기한(시작 1일 전까지)과 FR-08 수료 시작(시작일 당일부터)이 겹치지 않아, 같은 CONFIRMED 건을 취소와 수료가 동시에 바꿀 수 없다. 이 성질은 두 기능이 같은 시간대를 쓸 때만 유지된다.
+- **D-05 승급 회귀 테스트, pgtest (W-1):**
+  - 상황: 정원 2인 회차에 COMPLETED 1명, CONFIRMED 1명, WAITING 2명이 있고, CONFIRMED 1명이 취소한다.
+  - 기대: 대기자 1명만 승급하고, CONFIRMED와 COMPLETED 합계가 2다.
+  - 이유: `countSeatsTaken`을 고치지 않으면 2명이 승급해 정원을 넘는다.
+- **같은 임직원의 여러 신청 (W-3):** 실제 CANCELLED 행(작은 ID)과 재신청(큰 ID)을 쓰는 서비스 테스트와 pgtest로, 재신청 건이 수료되는지 검증한다.
+- **동시성 증명 (W-4):** 같은 회차에 신청 다수와 수료 요청을 동시에 실행하고, CONFIRMED와 COMPLETED 합계가 정원 이하인지 보는 pgtest를 `EnrollmentConcurrencyTest`에 추가한다. 늦어도 FR-06 병합 시점에는 넣는다. 지금은 세 쓰기 경로(신청, 수료, 취소)가 모두 회차 행 락을 먼저 잡고 수료는 정원 합계를 바꾸지 않아 위험이 낮다.
+
+## 5-2. 백로그 (FR-08 범위 밖, 최종 검토 제안)
+- **D-05의 부작용 (P-4):** FR-04는 시작일이 지난 회차의 신청을 막지 않는다. 시작 뒤 수료자로 정원이 차면 새 신청은 WAITING이 되는데, 수료로는 자리가 비지 않고 D-01 때문에 취소도 할 수 없다. 그러면 이 대기는 승급되지 않는다. 시작일 이후 신청을 막을지 개발자가 정한다.
+- **회차 수정에 락이 없음 (P-5):** FR-03 `CourseCommandService.updateSession`은 락 없이 `startDate`와 `capacity`를 바꾼다. 그래서 두 가지 상태가 생길 수 있다.
+  - 수료 처리한 회차의 시작일을 미래로 옮기면 "시작 전인데 수료자가 있는" 상태가 된다.
+  - 정원을 확정자와 수료자 합계보다 낮게 줄일 수 있다.
+- **응답 필드 이름 (P-2):** `RosterResponse.confirmed`에는 수료자도 들어간다. 설계 결정으로 이름은 그대로 두고(이 명세 1장: 확정자 목록에 수료자 포함), OpenAPI 설명에 적었다. 프론트를 만들 때 이름을 바꿀지 다시 본다.
 
 ## 6. 서비스 구조
 - **`RosterService`:** 클래스에 `@Transactional(readOnly = true)`를 붙인다. `getRoster`는 읽기 전용이고, `complete`에는 메서드 단위 `@Transactional`을 붙인다. 이름은 요구사항이 정했다. 스킬은 조회와 쓰기 서비스를 나누라고 하지만 여기서는 요구사항을 따른다.

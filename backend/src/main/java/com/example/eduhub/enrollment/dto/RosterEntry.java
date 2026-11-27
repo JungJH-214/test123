@@ -1,6 +1,7 @@
 package com.example.eduhub.enrollment.dto;
 
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
+import com.example.eduhub.enrollment.repository.RosterRow;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 

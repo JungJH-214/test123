@@ -2,7 +2,6 @@ package com.example.eduhub.enrollment.repository;
 
 import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
-import com.example.eduhub.enrollment.dto.RosterRow;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -25,7 +24,7 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
    * 없음)도 빠지지 않고 사번과 이름이 null로 나온다.
    */
   @Query(
-      "select new com.example.eduhub.enrollment.dto.RosterRow("
+      "select new com.example.eduhub.enrollment.repository.RosterRow("
           + "e.id, e.employeeId, emp.employeeNo, emp.name, e.status, e.createdAt) "
           + "from Enrollment e left join Employee emp on emp.id = e.employeeId "
           + "where e.session.id = :sessionId and e.status in ("

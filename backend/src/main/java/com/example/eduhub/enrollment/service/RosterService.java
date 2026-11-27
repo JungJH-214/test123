@@ -11,9 +11,9 @@ import com.example.eduhub.enrollment.dto.CompletionFailureReason;
 import com.example.eduhub.enrollment.dto.CompletionResponse;
 import com.example.eduhub.enrollment.dto.RosterEntry;
 import com.example.eduhub.enrollment.dto.RosterResponse;
-import com.example.eduhub.enrollment.dto.RosterRow;
 import com.example.eduhub.enrollment.exception.SessionNotStartedException;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
+import com.example.eduhub.enrollment.repository.RosterRow;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -35,8 +35,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>수료 처리 규칙: 회차 락을 먼저 잡고(없는 회차는 404), Asia/Seoul 기준 오늘이 시작일보다 이르면 409 SESSION_NOT_STARTED다(당일과
  * 종료된 회차는 허용). 요청의 중복 ID는 처음 순서대로 한 번만 처리한다. 확정(CONFIRMED)만 수료(COMPLETED)로 바꾸고, 신청이 없으면
  * NOT_ENROLLED, 대기면 WAITING, 이미 수료면 ALREADY_COMPLETED로 실패 처리하되 나머지는 계속 처리한다. 결과는 요청 순서를 따르고 저장은 변경
- * 감지에 맡긴다. 같은 임직원의 신청이 여러 건이면 ID가 큰(최신) 신청을 쓰고, 알 수 없는 상태(FR-06 전까지 CANCELLED 등)는 NOT_ENROLLED로
- * 처리한다.
+ * 감지에 맡긴다.
+ *
+ * <p>같은 임직원의 신청이 여러 건인 경우는 FR-06(CANCELLED) 이후에만 생긴다(취소 건과 재신청 건). 그때 최신 신청을 쓰도록 ID가 큰 쪽을 남긴다.
+ * CONFIRMED가 아닌 그 밖의 상태 분기(NOT_ENROLLED)는 지금 enum으로는 도달하지 않는 방어 코드다.
  */
 @Service
 @RequiredArgsConstructor

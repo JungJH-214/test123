@@ -22,9 +22,9 @@ import com.example.eduhub.enrollment.dto.CompletionFailureReason;
 import com.example.eduhub.enrollment.dto.CompletionResponse;
 import com.example.eduhub.enrollment.dto.RosterEntry;
 import com.example.eduhub.enrollment.dto.RosterResponse;
-import com.example.eduhub.enrollment.dto.RosterRow;
 import com.example.eduhub.enrollment.exception.SessionNotStartedException;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
+import com.example.eduhub.enrollment.repository.RosterRow;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -286,39 +286,6 @@ class RosterServiceTest {
     CompletionResponse response = service.complete(SESSION_ID, Collections.singletonList(1L));
 
     assertThat(response.getCompleted()).containsExactly(1L);
-  }
-
-  @Test
-  void complete_twoEnrollmentsForSameEmployee_usesLargerId() {
-    givenLockedSession();
-    Enrollment older = enrollment(1L, EnrollmentStatus.COMPLETED);
-    ReflectionTestUtils.setField(older, "id", 10L);
-    Enrollment newer = enrollment(1L, EnrollmentStatus.CONFIRMED);
-    ReflectionTestUtils.setField(newer, "id", 20L);
-    given(enrollmentRepository.findBySessionIdAndEmployeeIdIn(eq(SESSION_ID), any()))
-        .willReturn(Arrays.asList(newer, older));
-
-    CompletionResponse response = service.complete(SESSION_ID, Collections.singletonList(1L));
-
-    assertThat(response.getCompleted()).containsExactly(1L);
-    assertThat(newer.getStatus()).isEqualTo(EnrollmentStatus.COMPLETED);
-    assertThat(older.getStatus()).isEqualTo(EnrollmentStatus.COMPLETED);
-
-    Enrollment olderConfirmed = enrollment(2L, EnrollmentStatus.CONFIRMED);
-    ReflectionTestUtils.setField(olderConfirmed, "id", 30L);
-    Enrollment newerWaiting = enrollment(2L, EnrollmentStatus.WAITING);
-    ReflectionTestUtils.setField(newerWaiting, "id", 40L);
-    given(enrollmentRepository.findBySessionIdAndEmployeeIdIn(eq(SESSION_ID), any()))
-        .willReturn(Arrays.asList(newerWaiting, olderConfirmed));
-    givenLockedSession();
-
-    CompletionResponse second = service.complete(SESSION_ID, Collections.singletonList(2L));
-
-    assertThat(second.getCompleted()).isEmpty();
-    assertThat(second.getFailed())
-        .extracting(CompletionFailure::getReason)
-        .containsExactly(CompletionFailureReason.WAITING);
-    assertThat(olderConfirmed.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
   }
 
   private void givenLockedSession() {

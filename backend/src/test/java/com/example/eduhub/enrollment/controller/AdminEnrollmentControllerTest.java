@@ -17,13 +17,16 @@ import com.example.eduhub.enrollment.dto.CompletionFailureReason;
 import com.example.eduhub.enrollment.dto.CompletionResponse;
 import com.example.eduhub.enrollment.dto.RosterEntry;
 import com.example.eduhub.enrollment.dto.RosterResponse;
-import com.example.eduhub.enrollment.dto.RosterRow;
 import com.example.eduhub.enrollment.exception.SessionNotStartedException;
+import com.example.eduhub.enrollment.repository.RosterRow;
 import com.example.eduhub.enrollment.service.RosterService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -161,6 +164,30 @@ class AdminEnrollmentControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
     verifyNoInteractions(rosterService);
+  }
+
+  @Test
+  void complete_501Ids_returns400() throws Exception {
+    String ids =
+        LongStream.rangeClosed(1, 501).mapToObj(String::valueOf).collect(Collectors.joining(","));
+
+    mockMvc
+        .perform(postCompletions(COMPLETIONS_URL, "{\"employeeIds\":[" + ids + "]}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    verifyNoInteractions(rosterService);
+  }
+
+  @Test
+  void complete_500Ids_returns200() throws Exception {
+    List<Long> ids = LongStream.rangeClosed(1, 500).boxed().collect(Collectors.toList());
+    given(rosterService.complete(1L, ids))
+        .willReturn(new CompletionResponse(ids, Collections.emptyList()));
+    String body = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+
+    mockMvc
+        .perform(postCompletions(COMPLETIONS_URL, "{\"employeeIds\":[" + body + "]}"))
+        .andExpect(status().isOk());
   }
 
   @Test

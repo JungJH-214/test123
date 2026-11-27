@@ -1,4 +1,4 @@
-package com.example.eduhub.enrollment.dto;
+package com.example.eduhub.enrollment.repository;
 
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import java.time.LocalDateTime;
