@@ -82,4 +82,30 @@ public class EnrollmentController {
           EnrollmentStatus status) {
     return myEnrollmentQueryService.findMine(CurrentUser.from(jwt).getEmployeeId(), status);
   }
+
+  @Operation(summary = "내 신청 취소 (확정 취소 시 대기 1순위 자동 확정)")
+  @ApiResponse(responseCode = "200", description = "취소 성공 (status: CANCELLED)")
+  @ApiResponse(
+      responseCode = "400",
+      description = "경로 값 형식 오류 (INVALID_REQUEST)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "토큰이 없거나 올바르지 않음 (UNAUTHORIZED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "내 신청이 없음 (ENROLLMENT_NOT_FOUND)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description =
+          "이미 취소됨, 취소할 수 없는 상태, 취소 마감, 종료된 회차 (ENROLLMENT_ALREADY_CANCELLED,"
+              + " ENROLLMENT_NOT_CANCELLABLE, CANCEL_DEADLINE_PASSED, SESSION_CLOSED)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PostMapping("/api/me/enrollments/{enrollmentId}/cancel")
+  public EnrollmentResponse cancel(
+      @PathVariable Long enrollmentId, @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
+    return enrollmentCommandService.cancel(enrollmentId, CurrentUser.from(jwt).getEmployeeId());
+  }
 }
