@@ -1,4 +1,4 @@
-import { AuthApi, Configuration } from '@eduhub/api-client';
+import { AuthApi, Configuration, EnrollmentApi } from '@eduhub/api-client';
 import { http } from './http';
 
 /**
@@ -10,6 +10,9 @@ export const apiConfiguration = new Configuration({ basePath: '' });
 
 /** 로그인과 현재 사용자 확인 (NFR-03). */
 export const authApi = new AuthApi(apiConfiguration, undefined, http);
+
+/** 수강 신청(FR-04·05), 내 신청 내역(FR-07), 신청 취소(FR-06). */
+export const enrollmentApi = new EnrollmentApi(apiConfiguration, undefined, http);
 
 /** GET /api/me. 새로고침 뒤 저장된 토큰이 유효한지 확인한다. */
 export function fetchMe() {
