@@ -14,7 +14,10 @@
 
 
 
+export * from './api/default-api';
+export * from './api/auth-api';
 export * from './api/course-api';
 export * from './api/course-admin-api';
+export * from './api/enrollment-api';
 export * from './api/health-api';
 
