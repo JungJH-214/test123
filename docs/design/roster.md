@@ -85,7 +85,7 @@
 - **COMPLETED:** FR-08이 `EnrollmentStatus`에 추가한다. FR-07은 상태 enum을 그대로 돌려주고 `?status=`로 거르기만 하므로 코드를 바꿀 필요가 없다
 
 ## 5-1. FR-06과 합칠 때 맞출 지점 (2026-11-27)
-FR-06(PR #12, `c9bfb6c`)이 먼저 병합되어 FR-08 브랜치에 origin/main을 병합하면서 아래를 반영했다. 같은 임직원의 여러 신청을 실제 DB로 검증하는 pgtest(W-3)와 동시성 pgtest(W-4)는 병합 커밋 뒤에 이어서 추가한다. 다만 `Clock` 빈을 auth `SecurityConfig`에서 common으로 옮기는 일(FR-06 검토 권장)은 이번 범위에 넣지 않았다.
+FR-06(PR #12, `c9bfb6c`)이 먼저 병합되어 FR-08 브랜치에 origin/main을 병합하면서 아래를 반영했다. W-3, W-4 pgtest도 추가했다(`RosterCompletionPgTest`). 다만 `Clock` 빈을 auth `SecurityConfig`에서 common으로 옮기는 일(FR-06 검토 권장)은 이번 범위에 넣지 않았다.
 - **정원 집계:** FR-06은 신청 판정(`decide`)과 승급(`fillSeatsFromWaiting`)이 함께 쓰는 private `countSeatsTaken(sessionId)`를 둔다. D-05에 따라 **이 메서드 하나**가 CONFIRMED와 COMPLETED를 함께 세게 바꾼다. `decide`만 바꾸면 승급 기준이 갈라져 정원 초과 승급이 생긴다.
 - **CANCELLED 사유:** `CompletionFailureReason`에 `CANCELLED`를 추가하고, `RosterService.complete`의 "그 밖의 상태" 분기를 CANCELLED 사유로 바꾼다. 같은 임직원의 신청이 여러 건이면 ID가 큰 쪽(최신 신청)을 쓰는 규칙은 그대로 둔다. 취소 후 재신청 건이 있으면 그 건이 선택된다.
 - **명단 필터:** `findRosterRows`는 CONFIRMED, COMPLETED, WAITING만 고르므로 CANCELLED는 자동으로 빠진다. 이를 검증하는 pgtest를 추가한다.
@@ -101,8 +101,8 @@ FR-06(PR #12, `c9bfb6c`)이 먼저 병합되어 FR-08 브랜치에 origin/main�
   - 상황: 정원 2인 회차에 COMPLETED 1명, CONFIRMED 1명, WAITING 2명이 있고, CONFIRMED 1명이 취소한다.
   - 기대: 대기자 1명만 승급하고, CONFIRMED와 COMPLETED 합계가 2다.
   - 이유: `countSeatsTaken`을 고치지 않으면 2명이 승급해 정원을 넘는다.
-- **같은 임직원의 여러 신청 (W-3):** 실제 CANCELLED 행(작은 ID)과 재신청(큰 ID)을 쓰는 서비스 테스트와 pgtest로, 재신청 건이 수료되는지 검증한다.
-- **동시성 증명 (W-4):** 같은 회차에 신청 다수와 수료 요청을 동시에 실행하고, CONFIRMED와 COMPLETED 합계가 정원 이하인지 보는 pgtest를 `EnrollmentConcurrencyTest`에 추가한다. 늦어도 FR-06 병합 시점에는 넣는다. 지금은 세 쓰기 경로(신청, 수료, 취소)가 모두 회차 행 락을 먼저 잡고 수료는 정원 합계를 바꾸지 않아 위험이 낮다.
+- **같은 임직원의 여러 신청 (W-3):** 실제 CANCELLED 행(작은 ID)과 재신청(큰 ID)을 쓰는 서비스 테스트(`RosterServiceTest`)와 pgtest(`RosterCompletionPgTest`)로, 재신청 건이 수료되는지 검증한다.
+- **동시성 증명 (W-4):** 같은 회차에 신청 다수와 수료 요청을 동시에 실행하고, CONFIRMED와 COMPLETED 합계가 정원 이하인지 보는 pgtest를 `RosterCompletionPgTest`에 두었다. 지금은 세 쓰기 경로(신청, 수료, 취소)가 모두 회차 행 락을 먼저 잡고 수료는 정원 합계를 바꾸지 않아 위험이 낮다.
 
 ## 5-2. 백로그 (FR-08 범위 밖, 최종 검토 제안)
 - **D-05의 부작용 (P-4):** FR-04는 시작일이 지난 회차의 신청을 막지 않는다. 시작 뒤 수료자로 정원이 차면 새 신청은 WAITING이 되는데, 수료로는 자리가 비지 않고 D-01 때문에 취소도 할 수 없다. 그러면 이 대기는 승급되지 않는다. 시작일 이후 신청을 막을지 개발자가 정한다.
