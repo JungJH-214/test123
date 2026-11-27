@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>취소 규칙(FR-06): 본인 신청만 취소할 수 있고 남의 신청이나 없는 신청은 똑같이 404다(404 우선). 회차 락을 잡은 뒤 종료 회차(409
  * SESSION_CLOSED), 상태(이미 취소 등), 마감(D-01: 오늘(Asia/Seoul)이 시작일 1일 전까지) 순서로 검사하고, 모두 통과해야 상태를 바꾼다. 취소한
- * 신청이 확정이었으면 대기 승급을 한다.
+ * 뒤에는 신청 상태와 관계없이 빈 자리만큼 대기 승급을 한다.
  *
  * <p>승급 규칙: 대기 중 신청 id가 가장 작은 신청(D-04 1순위)부터 확정 수가 정원보다 적은 동안 반복해 확정한다. 신청할 때도 판정 전에 먼저 승급해서 새 신청이
  * 대기자를 앞지르지 않게 한다.
@@ -70,7 +70,7 @@ public class EnrollmentCommandService {
     return EnrollmentResponse.from(saved);
   }
 
-  /** 내 신청을 취소한다. 확정 신청이면 대기 1순위를 승급한다 (FR-06). */
+  /** 내 신청을 취소한다. 취소 뒤에는 상태와 관계없이 빈 자리만큼 대기 순서대로 승급한다 (FR-06). */
   public EnrollmentResponse cancel(Long enrollmentId, Long employeeId) {
     // 락 전에는 회차 ID 값만 읽는다. 엔티티를 읽으면 1차 캐시 때문에 락 뒤 최신 상태를 못 본다.
     Long sessionId =
@@ -90,11 +90,10 @@ public class EnrollmentCommandService {
     }
     enrollment.checkCancellable();
     checkDeadline(session);
-    boolean wasConfirmed = enrollment.isConfirmed();
     enrollment.cancel();
-    if (wasConfirmed) {
-      fillSeatsFromWaiting(session);
-    }
+    // 승급 판단의 확정 수 집계가 방금 취소를 반영하도록 먼저 flush한다(자동 flush에 기대지 않는다).
+    enrollmentRepository.flush();
+    fillSeatsFromWaiting(session);
     return EnrollmentResponse.from(enrollment);
   }
 
@@ -106,13 +105,12 @@ public class EnrollmentCommandService {
   }
 
   /**
-   * 확정 수가 정원보다 적은 동안 대기 1순위(D-04, 신청 id 최소)를 확정한다. 호출 전에 회차 행 락을 잡고 있어야 한다. 승급이 있으면 flush해서 이어지는
-   * 집계가 바뀐 상태를 보게 한다.
+   * 확정 수가 정원보다 적은 동안 대기 1순위(D-04, 신청 id 최소)를 확정한다. 호출 전에 회차 행 락을 잡고 있어야 한다. 한 명 확정할 때마다 flush해서 다음
+   * 조회와 이어지는 집계가 바뀐 상태를 보게 한다.
    */
   private void fillSeatsFromWaiting(CourseSession session) {
     Long id = session.getId();
     long confirmed = countSeatsTaken(id);
-    boolean promoted = false;
     while (confirmed < session.getCapacity()) {
       Optional<Enrollment> next =
           enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
@@ -121,11 +119,9 @@ public class EnrollmentCommandService {
         break;
       }
       next.get().confirmFromWaiting();
-      confirmed++;
-      promoted = true;
-    }
-    if (promoted) {
+      // 다음 WAITING 조회가 방금 확정한 행을 건너뛰도록 자동 flush에 기대지 않고 명시적으로 반영한다
       enrollmentRepository.flush();
+      confirmed++;
     }
   }
 

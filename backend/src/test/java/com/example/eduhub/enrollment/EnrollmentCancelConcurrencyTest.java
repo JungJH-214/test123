@@ -154,6 +154,33 @@ class EnrollmentCancelConcurrencyTest {
     assertThat(waitingIdsAmong(sessionId, 101L, 150L)).hasSize(3).allMatch(id -> id > ids.get(15L));
   }
 
+  /**
+   * W1: 정원만 늘어 빈 자리 2 + 대기 5인 상태에서 대기자(사원 15)가 취소해도 대기 1순위(사원 11, 12)가 승급한다. cancel()에서 대기 취소 때
+   * fillSeatsFromWaiting 호출을 빼면 이 테스트는 실패해야 한다.
+   */
+  @Test
+  void cancelWaiting_withFreeSeats_promotesWaitingInOrder() {
+    Long sessionId = saveSession();
+    Map<Long, Long> ids = prepare(sessionId);
+    new TransactionTemplate(transactionManager)
+        .executeWithoutResult(
+            status ->
+                entityManager
+                    .createQuery("update CourseSession s set s.capacity = 12 where s.id = :id")
+                    .setParameter("id", sessionId)
+                    .executeUpdate());
+
+    enrollmentCommandService.cancel(ids.get(15L), 15L);
+
+    assertThat(statusOf(ids.get(15L))).isEqualTo(EnrollmentStatus.CANCELLED);
+    assertThat(statusOf(ids.get(11L))).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(statusOf(ids.get(12L))).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(statusOf(ids.get(13L))).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(statusOf(ids.get(14L))).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(count(sessionId, EnrollmentStatus.CONFIRMED)).isEqualTo(12);
+    assertThat(count(sessionId, EnrollmentStatus.WAITING)).isEqualTo(2);
+  }
+
   @Test
   void sameEnrollmentCancelledTenTimes_onlyOneSucceeds_onePromotion() throws Exception {
     Long sessionId = saveSession();

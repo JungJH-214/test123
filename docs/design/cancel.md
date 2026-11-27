@@ -9,7 +9,7 @@
 ## 1. 요구사항 정리
 | ID | 원문 | 이번 작업에서 정한 것 |
 |---|---|---|
-| FR-06 | 신청을 취소하면 대기 1순위가 자동으로 신청 확정된다 | 확정 신청을 취소하면, 같은 회차의 대기 중 D-04 1순위(신청 ID가 가장 작은 `WAITING`)를 `CONFIRMED`로 바꾼다. 확정 수가 정원보다 적은 동안 반복한다(정원이 줄었다가 다시 늘어난 경우까지 포함). 대기 신청을 취소하면 승급은 없고, 뒤 대기자의 순번이 하나씩 당겨진다(순번은 저장하지 않고 계산하므로 자동) |
+| FR-06 | 신청을 취소하면 대기 1순위가 자동으로 신청 확정된다 | 신청을 취소하면(확정·대기 상관없이), 같은 회차의 대기 중 D-04 1순위(신청 ID가 가장 작은 `WAITING`)를 `CONFIRMED`로 바꾼다. 확정 수가 정원보다 적은 동안 반복한다(정원이 줄었다가 다시 늘어난 경우까지 포함). 대기 신청을 취소해도 같은 승급을 시도하며, 빈 자리가 없으면 승급 없이 뒤 대기자의 순번만 하나씩 당겨진다(순번은 저장하지 않고 계산하므로 자동). 최종 검토 W1에서 바뀜: 취소는 상태와 관계없이 항상 승급 시도 |
 | D-01 | 신청 취소는 회차 시작 1일 전까지 가능하다 | 오늘(업무 시간대 날짜)이 `startDate - 1일` 이하이면 취소 가능, 아니면 409 `CANCEL_DEADLINE_PASSED`. 즉 시작 전날 23:59:59까지 (Q1, Q2) |
 | NFR-03 | 본인 신청만 취소 가능 | 신청자는 토큰의 사원(`CurrentUser`). 다른 사원의 신청이나 없는 신청은 똑같이 404 `ENROLLMENT_NOT_FOUND` (존재 여부를 드러내지 않는다, auth 설계 결정 2) |
 | NFR-01 | 동시성 정합성 | 취소·승급을 신청과 같은 회차 행 락 안에서 한 트랜잭션으로 처리한다. 동시에 취소와 신청이 섞여도 확정 수가 정원을 넘지 않고, 승급 대상은 항상 D-04 1순위다 |
@@ -85,8 +85,7 @@
 5. `enrollment.checkCancellable()` (상태 검사: 409 `ENROLLMENT_ALREADY_CANCELLED` / `ENROLLMENT_NOT_CANCELLABLE`) → 마감 검사(409 `CANCEL_DEADLINE_PASSED`) → `enrollment.cancel()`
    - 상태 검사를 마감 검사보다 먼저 하는 이유: 이미 취소한 신청에는 "마감 지남"보다 "이미 취소됨"이 정확하다
    - 상태 변경은 모든 검사가 끝난 뒤에만 한다. 예외가 나면 아무것도 바뀌지 않는다
-   - 취소 전 상태(`CONFIRMED` 여부)를 변수에 담아 둔다
-6. 취소한 신청이 `CONFIRMED`였으면 `fillSeatsFromWaiting(session)`
+6. `enrollmentRepository.flush()`로 취소를 먼저 반영한 뒤, 취소 전 상태와 관계없이 항상 `fillSeatsFromWaiting(session)` (최종 검토 W1: 빈 자리 + 대기자 상태가 남아 있어도 대기 취소로 해소. flush는 승급 판단의 확정 수 집계가 자동 flush에 기대지 않게 하려고 W1·W2 재검토 참고 1에서 추가)
 7. 응답: `EnrollmentResponse.from(enrollment)` (status `CANCELLED`, `waitingNumber` null)
 - 변경은 dirty checking으로 저장하고 커밋 시 flush한다
 
@@ -96,10 +95,10 @@ confirmed = count(session, CONFIRMED)
 while confirmed < session.capacity:
     next = findFirstBySessionIdAndStatusOrderByIdAsc(session.id, WAITING)
     if next 없음: break
-    next.confirmFromWaiting(); confirmed++
+    next.confirmFromWaiting(); flush(); confirmed++
 ```
 - 반복하는 이유: 정원이 늘어난 뒤(Q5, W1)에는 빈 자리가 둘 이상일 수 있다. 보통은 0번 또는 1번 돈다
-- 승급 뒤 `flush`해서 같은 트랜잭션의 다음 집계·조회가 바뀐 상태를 보게 한다(`saveAndFlush` 없이 `enrollmentRepository.flush()`)
+- 한 명 확정할 때마다 `enrollmentRepository.flush()`한다. 다음 `WAITING` 조회가 방금 확정한 행을 건너뛰고 이어지는 집계가 바뀐 상태를 보게 하며, Hibernate 자동 flush에 기대지 않는다(최종 검토 W2에서 바뀜: 끝에 한 번 -> 승급마다)
 
 ### 신청 경로 보완 (Q5)
 - `enroll()`의 2단계(락) 직후, 종료·중복 검사 뒤에 `fillSeatsFromWaiting(session)`을 먼저 부르고, 그다음 기존 판정(`decide`)을 한다
@@ -131,7 +130,8 @@ while confirmed < session.capacity:
 | S1 | 없는 신청 또는 남의 신청 | 404 `ENROLLMENT_NOT_FOUND`, 락 조회 안 함 |
 | S2 | 확정 취소, 대기 있음 | 취소됨, D-04 1순위 대기가 `CONFIRMED` |
 | S3 | 확정 취소, 대기 없음 | 취소됨, 승급 없음 |
-| S4 | 대기 취소 | 취소됨, 승급 조회 안 함 |
+| S4 | 대기 취소, 확정 수 == 정원 | 취소됨, 확정 수 조회는 하되 승급 없음 (W1) |
+| S4b | 대기 취소, 정원 7·확정 6·대기 3 | 남은 대기 1순위(ID 최소)가 `CONFIRMED` (W1) |
 | S5 | 마감: 오늘 = 시작일 − 1일 / 오늘 = 시작일 | 성공 / 409 `CANCEL_DEADLINE_PASSED`, 상태 변경 없음 |
 | S6 | 시간대: UTC 2026-12-09T15:30Z(서울 12-10 00:30), 시작일 12-11 / 12-10 | 성공 / 409 (서울 날짜 기준) |
 | S7 | 종료된 회차 | 409 `SESSION_CLOSED` |
@@ -155,6 +155,7 @@ while confirmed < session.capacity:
 | R3 | 확정 10명이 동시에 모두 취소 (대기 5) | 대기 5명 모두 `CONFIRMED`, 확정 수 == 5, 승급 순서가 ID 순 |
 | R4 | 취소 후 재신청 (부분 유일 인덱스) | 새 신청 ID로 저장, 기존 대기자 뒤 |
 | R5 | 보안 통합(`SecurityIntegrationTest`): 사원 B가 사원 A의 신청 취소 | 404, A의 신청 상태 그대로 |
+| R6 | 정원 10/확정 10/대기 5에서 정원을 12로 직접 변경 후 대기 사원 15가 취소 (W1) | 사원 11·12 `CONFIRMED`, 확정 12, 대기 2(13·14) |
 
 - 동시성 테스트의 데이터 정리는 테스트가 만든 회차 기준으로 한다(pgtest 공유 DB 문제, 별도 세션 "pgtest 테스트 DB를 worktree별로 분리"에서 다룸)
 
@@ -164,6 +165,7 @@ while confirmed < session.capacity:
 
 ## 7. 위험 영역
 - **락 순서:** 취소에서 신청 엔티티를 락 전에 읽으면(1차 캐시) 락 뒤에도 오래된 상태를 본다. 1단계는 회차 ID 값만 읽는다. reviewer는 이것을 반드시 본다
+- **취소 경로 승급(최종 검토 W1·W2):** 취소는 상태와 관계없이 항상 승급을 시도한다(대기 취소도 빈 자리가 있으면 승급). 승급은 한 명마다 flush하므로 연속 승급 시 쿼리가 늘지만 회차당 대기 수가 정원의 50% 이하라 허용한다
 - **승급 기준 일치:** 승급 대상은 FR-07 순번 계산과 같은 D-04(ID 순)여야 한다. 다르면 화면의 1번과 실제 승급자가 달라진다
 - **신청 경로 변경(Q5):** `enroll()`에 승급을 넣으면 신청 한 번에 다른 사원의 상태가 바뀔 수 있다. 응답에는 본인 신청만 담는다. 기존 FR-04·FR-05 테스트(정원·대기 상한, 순번 {1..5})가 그대로 통과해야 한다
 - **회차 수정 경로(범위 밖):** `updateSession`이 회차 락 없이 정원을 바꾸는 문제(FR-04 최종 검토 경고 3, FR-05 W1)는 남는다. Q5 보완으로 "다음 신청 또는 취소 때" 대기자가 먼저 확정되므로 순번 약속은 지켜지지만, 정원을 늘린 직후 대기자가 바로 확정되지는 않는다. FR-03 후속 작업으로 남긴다

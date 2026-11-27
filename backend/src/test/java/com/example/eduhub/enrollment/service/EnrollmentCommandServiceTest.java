@@ -30,6 +30,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -244,7 +246,7 @@ class EnrollmentCommandServiceTest {
     assertThat(response.getWaitingNumber()).isNull();
     verify(enrollmentRepository, times(1))
         .findFirstBySessionIdAndStatusOrderByIdAsc(SESSION_ID, EnrollmentStatus.WAITING);
-    verify(enrollmentRepository).flush();
+    verify(enrollmentRepository, times(2)).flush(); // 취소 직후 1회 + 승급 1회
     // 락 전에는 회차 ID만 읽고, 락 뒤에 신청 엔티티를 읽는다
     InOrder order = inOrder(enrollmentRepository, courseSessionRepository);
     order.verify(enrollmentRepository).findSessionIdByIdAndEmployeeId(ENROLLMENT_ID, EMPLOYEE_ID);
@@ -267,19 +269,44 @@ class EnrollmentCommandServiceTest {
     service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
 
     assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
-    verify(enrollmentRepository, never()).flush();
+    verify(enrollmentRepository, times(1)).flush(); // 취소 직후만, 승급 없음
   }
 
   @Test
-  void cancel_waiting_noPromotionLookup() {
+  void cancel_waiting_countsButNoPromotionWhenFull() {
     CourseSession session = givenSession(10);
     Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+        .willReturn(10L);
 
     service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
 
     assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
-    verify(enrollmentRepository, never()).countBySessionIdAndStatus(any(), any());
+    verify(enrollmentRepository).countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED);
     verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
+    verify(enrollmentRepository, times(1)).flush(); // 취소 직후만, 승급 없음
+  }
+
+  @Test
+  void cancel_waitingWithFreeSeat_promotesFirstRemainingWaiting() {
+    // 정원 7, 확정 6, 대기 3 -> 대기 1명 취소 -> 남은 대기 1순위 확정
+    CourseSession session = givenSession(7);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
+    Enrollment first = Enrollment.create(session, 31L, EnrollmentStatus.WAITING);
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+        .willReturn(6L);
+    given(
+            enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
+                SESSION_ID, EnrollmentStatus.WAITING))
+        .willReturn(Optional.of(first));
+
+    service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
+
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+    assertThat(first.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    verify(enrollmentRepository, times(1))
+        .findFirstBySessionIdAndStatusOrderByIdAsc(SESSION_ID, EnrollmentStatus.WAITING);
+    verify(enrollmentRepository, times(2)).flush(); // 취소 직후 1회 + 승급 1회
   }
 
   @Test
@@ -414,12 +441,12 @@ class EnrollmentCommandServiceTest {
     given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.WAITING))
         .willReturn(0L);
     givenSaveReturnsArgument();
-    // flush 시점에 승급(상태 전이)이 이미 끝났는지, w1이 먼저 승급됐는지 기록한다
-    EnrollmentStatus[] atFlush = new EnrollmentStatus[2];
+    // 각 flush 시점에 승급(상태 전이)이 몇 명까지 끝났는지 기록한다
+    List<EnrollmentStatus> atFlush = new ArrayList<>();
     doAnswer(
             invocation -> {
-              atFlush[0] = w1.getStatus();
-              atFlush[1] = w2.getStatus();
+              atFlush.add(w1.getStatus());
+              atFlush.add(w2.getStatus());
               return null;
             })
         .when(enrollmentRepository)
@@ -429,17 +456,27 @@ class EnrollmentCommandServiceTest {
 
     assertThat(w1.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
     assertThat(w2.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
-    assertThat(atFlush).containsExactly(EnrollmentStatus.CONFIRMED, EnrollmentStatus.CONFIRMED);
+    // 1번째 flush: w1만 확정, 2번째 flush: w1·w2 모두 확정
+    assertThat(atFlush)
+        .containsExactly(
+            EnrollmentStatus.CONFIRMED,
+            EnrollmentStatus.WAITING,
+            EnrollmentStatus.CONFIRMED,
+            EnrollmentStatus.CONFIRMED);
     assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
     assertThat(response.getWaitingNumber()).isEqualTo(1);
-    verify(enrollmentRepository).flush();
-    // 첫 확정 집계 -> 승급 조회 2회 -> flush -> decide의 두 번째 확정 집계
+    verify(enrollmentRepository, times(2)).flush();
+    // 첫 확정 집계 -> (승급 조회 -> flush) x 2 -> decide의 두 번째 확정 집계
     InOrder order = inOrder(enrollmentRepository);
     order
         .verify(enrollmentRepository)
         .countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED);
     order
-        .verify(enrollmentRepository, times(2))
+        .verify(enrollmentRepository)
+        .findFirstBySessionIdAndStatusOrderByIdAsc(SESSION_ID, EnrollmentStatus.WAITING);
+    order.verify(enrollmentRepository).flush();
+    order
+        .verify(enrollmentRepository)
         .findFirstBySessionIdAndStatusOrderByIdAsc(SESSION_ID, EnrollmentStatus.WAITING);
     order.verify(enrollmentRepository).flush();
     order
