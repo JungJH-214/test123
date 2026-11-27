@@ -3,6 +3,7 @@ package com.example.eduhub.enrollment.repository;
 import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,6 +11,20 @@ import org.springframework.data.repository.query.Param;
 public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
   boolean existsBySessionIdAndEmployeeId(Long sessionId, Long employeeId);
+
+  boolean existsBySessionIdAndEmployeeIdAndStatusNot(
+      Long sessionId, Long employeeId, EnrollmentStatus status);
+
+  /** 회차 락을 잡기 전에 회차 ID만 읽는다. 엔티티를 영속성 컨텍스트에 올리지 않는다. */
+  @Query("select e.session.id from Enrollment e where e.id = :id and e.employeeId = :employeeId")
+  Optional<Long> findSessionIdByIdAndEmployeeId(
+      @Param("id") Long id, @Param("employeeId") Long employeeId);
+
+  Optional<Enrollment> findByIdAndEmployeeId(Long id, Long employeeId);
+
+  /** 승급 대상(D-04: 같은 상태 중 신청 ID가 가장 작은 신청). */
+  Optional<Enrollment> findFirstBySessionIdAndStatusOrderByIdAsc(
+      Long sessionId, EnrollmentStatus status);
 
   long countBySessionIdAndStatus(Long sessionId, EnrollmentStatus status);
 
