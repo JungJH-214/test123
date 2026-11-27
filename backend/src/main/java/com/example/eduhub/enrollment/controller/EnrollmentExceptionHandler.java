@@ -9,8 +9,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-/** 수강 신청 전용 예외 처리. 경로 값 형식 오류를 400 INVALID_REQUEST로 바꾼다. */
-@RestControllerAdvice(assignableTypes = EnrollmentController.class)
+/** 수강 신청·관리자 수강 API 전용 예외 처리. 경로 값 형식 오류를 400 INVALID_REQUEST로 바꾼다. */
+@RestControllerAdvice(
+    assignableTypes = {EnrollmentController.class, AdminEnrollmentController.class})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class EnrollmentExceptionHandler {
 

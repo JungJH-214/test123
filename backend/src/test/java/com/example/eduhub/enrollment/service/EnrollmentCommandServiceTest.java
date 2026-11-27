@@ -3,6 +3,8 @@ package com.example.eduhub.enrollment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -21,11 +23,15 @@ import com.example.eduhub.enrollment.exception.SessionFullException;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -104,6 +110,31 @@ class EnrollmentCommandServiceTest {
     assertThatThrownBy(() -> service.enroll(SESSION_ID, EMPLOYEE_ID))
         .isInstanceOf(SessionFullException.class);
     verify(enrollmentRepository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void enroll_confirmedPlusCompletedOneBelowCapacity_confirmed() {
+    givenSession(2);
+    givenCounts(1, 0);
+    givenSaveReturnsArgument();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(response.getWaitingNumber()).isNull();
+  }
+
+  @Test
+  void enroll_confirmedPlusCompletedFillCapacity_waiting() {
+    givenSession(2);
+    // 확정 1명 + 수료 1명 = 합계 2명이 정원을 채운다 (D-05)
+    givenCounts(2, 0);
+    givenSaveReturnsArgument();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(response.getWaitingNumber()).isEqualTo(1);
   }
 
   @Test
@@ -194,11 +225,22 @@ class EnrollmentCommandServiceTest {
   }
 
   private void givenCounts(long confirmed, long waiting) {
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+    given(
+            enrollmentRepository.countBySessionIdAndStatusIn(
+                eq(SESSION_ID), argThat(isSeatStatuses())))
         .willReturn(confirmed);
     lenient()
         .when(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.WAITING))
         .thenReturn(waiting);
+  }
+
+  /** CONFIRMED와 COMPLETED를 순서와 컬렉션 타입에 상관없이 정확히 포함하는지 본다. */
+  private static ArgumentMatcher<Collection<EnrollmentStatus>> isSeatStatuses() {
+    return statuses ->
+        statuses != null
+            && statuses.size() == 2
+            && new HashSet<>(statuses)
+                .equals(EnumSet.of(EnrollmentStatus.CONFIRMED, EnrollmentStatus.COMPLETED));
   }
 
   private void givenSaveReturnsArgument() {

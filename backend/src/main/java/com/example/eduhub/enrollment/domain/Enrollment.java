@@ -52,4 +52,12 @@ public class Enrollment {
   public static Enrollment create(CourseSession session, Long employeeId, EnrollmentStatus status) {
     return new Enrollment(session, employeeId, status);
   }
+
+  /** 수료 처리한다. 확정(CONFIRMED) 상태에서만 가능하다 (FR-08). */
+  public void complete() {
+    if (status != EnrollmentStatus.CONFIRMED) {
+      throw new IllegalStateException("확정 상태만 수료 처리할 수 있습니다. 현재 상태: " + status);
+    }
+    this.status = EnrollmentStatus.COMPLETED;
+  }
 }

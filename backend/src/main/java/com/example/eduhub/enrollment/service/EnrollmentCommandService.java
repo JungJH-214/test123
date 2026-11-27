@@ -11,6 +11,8 @@ import com.example.eduhub.enrollment.exception.DuplicateEnrollmentException;
 import com.example.eduhub.enrollment.exception.SessionFullException;
 import com.example.eduhub.enrollment.repository.EnrollmentConstraints;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
+import java.util.Arrays;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -19,15 +21,19 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 수강 신청 (FR-04, NFR-01, D-02).
  *
- * <p>규칙: 회차 행에 쓰기 락을 걸고 확정 수를 센 뒤 저장까지 한 트랜잭션에서 한다. 확정 수가 정원보다 적으면 확정, 정원이 찼으면 대기(정원의 50% 내림까지),
- * 대기도 차면 409 SESSION_FULL이다. 같은 회차에 이미 신청했으면 409 ENROLLMENT_DUPLICATE다. 종료된 회차는 409 SESSION_CLOSED,
- * 없는 회차는 404 SESSION_NOT_FOUND다. 시작일이 지난 회차도 막지 않는다. 대기 순번(FR-05, D-04)은 락 안에서 센 기존 대기 수 + 1이다.
- * D-04는 같은 회차 대기 중 신청 id 오름차순이고, id는 락을 잡은 뒤 저장할 때 발급되므로 새 대기는 항상 그 순서의 맨 뒤다.
+ * <p>규칙: 회차 행에 쓰기 락을 걸고 확정 수(CONFIRMED와 COMPLETED 합계, D-05)를 센 뒤 저장까지 한 트랜잭션에서 한다. 확정 수가 정원보다 적으면
+ * 확정, 정원이 찼으면 대기(정원의 50% 내림까지), 대기도 차면 409 SESSION_FULL이다. 같은 회차에 이미 신청했으면 409
+ * ENROLLMENT_DUPLICATE다. 종료된 회차는 409 SESSION_CLOSED, 없는 회차는 404 SESSION_NOT_FOUND다. 시작일이 지난 회차도 막지
+ * 않는다. 수료자(COMPLETED)도 정원을 차지하므로 수료 처리로 자리가 비지 않는다(D-05). 대기 순번(FR-05, D-04)은 락 안에서 센 기존 대기 수 +
+ * 1이다. D-04는 같은 회차 대기 중 신청 id 오름차순이고, id는 락을 잡은 뒤 저장할 때 발급되므로 새 대기는 항상 그 순서의 맨 뒤다.
  */
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class EnrollmentCommandService {
+
+  private static final List<EnrollmentStatus> SEAT_STATUSES =
+      Arrays.asList(EnrollmentStatus.CONFIRMED, EnrollmentStatus.COMPLETED);
 
   private final CourseSessionRepository courseSessionRepository;
   private final EnrollmentRepository enrollmentRepository;
@@ -54,7 +60,7 @@ public class EnrollmentCommandService {
 
   private Decision decide(CourseSession session) {
     Long id = session.getId();
-    long confirmed = enrollmentRepository.countBySessionIdAndStatus(id, EnrollmentStatus.CONFIRMED);
+    long confirmed = enrollmentRepository.countBySessionIdAndStatusIn(id, SEAT_STATUSES);
     if (confirmed < session.getCapacity()) {
       return new Decision(EnrollmentStatus.CONFIRMED, 0);
     }
