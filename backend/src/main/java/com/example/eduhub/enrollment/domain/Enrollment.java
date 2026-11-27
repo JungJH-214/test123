@@ -1,6 +1,8 @@
 package com.example.eduhub.enrollment.domain;
 
 import com.example.eduhub.course.domain.CourseSession;
+import com.example.eduhub.enrollment.exception.EnrollmentAlreadyCancelledException;
+import com.example.eduhub.enrollment.exception.EnrollmentNotCancellableException;
 import java.time.LocalDateTime;
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -51,5 +53,41 @@ public class Enrollment {
 
   public static Enrollment create(CourseSession session, Long employeeId, EnrollmentStatus status) {
     return new Enrollment(session, employeeId, status);
+  }
+
+  /** 수료 처리한다. 확정(CONFIRMED) 상태에서만 가능하다 (FR-08). */
+  public void complete() {
+    if (status != EnrollmentStatus.CONFIRMED) {
+      throw new IllegalStateException("확정 상태만 수료 처리할 수 있습니다. 현재 상태: " + status);
+    }
+    this.status = EnrollmentStatus.COMPLETED;
+  }
+
+  /** 취소할 수 있는 상태인지 검사한다. 이미 취소됐거나 확정·대기가 아니면 예외. */
+  public void checkCancellable() {
+    if (status == EnrollmentStatus.CANCELLED) {
+      throw new EnrollmentAlreadyCancelledException(id);
+    }
+    if (status != EnrollmentStatus.CONFIRMED && status != EnrollmentStatus.WAITING) {
+      throw new EnrollmentNotCancellableException(id, status);
+    }
+  }
+
+  /** 신청을 취소한다 (FR-06). 검사를 통과해야만 상태가 바뀐다. */
+  public void cancel() {
+    checkCancellable();
+    this.status = EnrollmentStatus.CANCELLED;
+  }
+
+  /** 대기 신청을 확정으로 승급한다 (FR-06). 대기가 아니면 호출 오류다. */
+  public void confirmFromWaiting() {
+    if (status != EnrollmentStatus.WAITING) {
+      throw new IllegalStateException("대기 신청만 확정할 수 있습니다: " + id);
+    }
+    this.status = EnrollmentStatus.CONFIRMED;
+  }
+
+  public boolean isConfirmed() {
+    return status == EnrollmentStatus.CONFIRMED;
   }
 }

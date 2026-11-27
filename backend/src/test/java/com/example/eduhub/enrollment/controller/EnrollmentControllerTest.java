@@ -1,6 +1,8 @@
 package com.example.eduhub.enrollment.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasKey;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -8,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,10 +24,19 @@ import com.example.eduhub.course.exception.SessionNotFoundException;
 import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import com.example.eduhub.enrollment.dto.EnrollmentResponse;
+import com.example.eduhub.enrollment.dto.MyEnrollmentResponse;
+import com.example.eduhub.enrollment.exception.CancelDeadlinePassedException;
 import com.example.eduhub.enrollment.exception.DuplicateEnrollmentException;
+import com.example.eduhub.enrollment.exception.EnrollmentAlreadyCancelledException;
+import com.example.eduhub.enrollment.exception.EnrollmentNotCancellableException;
+import com.example.eduhub.enrollment.exception.EnrollmentNotFoundException;
 import com.example.eduhub.enrollment.exception.SessionFullException;
+import com.example.eduhub.enrollment.repository.MyEnrollmentRow;
 import com.example.eduhub.enrollment.service.EnrollmentCommandService;
+import com.example.eduhub.enrollment.service.MyEnrollmentQueryService;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collections;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +55,7 @@ class EnrollmentControllerTest {
 
   @Autowired private MockMvc mockMvc;
   @MockBean private EnrollmentCommandService enrollmentCommandService;
+  @MockBean private MyEnrollmentQueryService myEnrollmentQueryService;
 
   // ---- 성공 ----
 
@@ -54,7 +67,9 @@ class EnrollmentControllerTest {
         .perform(post(URL).with(employee()))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("CONFIRMED"))
-        .andExpect(jsonPath("$.employeeId").value(7));
+        .andExpect(jsonPath("$.employeeId").value(7))
+        .andExpect(jsonPath("$", hasKey("waitingNumber")))
+        .andExpect(jsonPath("$.waitingNumber").isEmpty());
   }
 
   @Test
@@ -85,12 +100,13 @@ class EnrollmentControllerTest {
 
   @Test
   void enroll_waiting_returns201WithWaiting() throws Exception {
-    given(enrollmentCommandService.enroll(1L, 7L)).willReturn(response(EnrollmentStatus.WAITING));
+    given(enrollmentCommandService.enroll(1L, 7L)).willReturn(waitingResponse(3));
 
     mockMvc
         .perform(post(URL).with(employee()))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.status").value("WAITING"));
+        .andExpect(jsonPath("$.status").value("WAITING"))
+        .andExpect(jsonPath("$.waitingNumber").value(3));
   }
 
   // ---- 401, 400 ----
@@ -158,16 +174,222 @@ class EnrollmentControllerTest {
         .andExpect(jsonPath("$.code").value("SESSION_FULL"));
   }
 
+  // ---- 내 신청 내역 (FR-07) ----
+
+  private static final String ME_URL = "/api/me/enrollments";
+
+  @Test
+  void myEnrollments_returns200WithFields() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, null))
+        .willReturn(Collections.singletonList(myResponse(EnrollmentStatus.WAITING, 2L)));
+
+    mockMvc
+        .perform(get(ME_URL).with(employee()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].courseTitle").value("Java 기초"))
+        .andExpect(jsonPath("$[0].waitingNumber").value(3))
+        .andExpect(jsonPath("$[0].status").value("WAITING"));
+  }
+
+  @Test
+  void myEnrollments_usesEmployeeIdFromJwt() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, null)).willReturn(Collections.emptyList());
+
+    mockMvc
+        .perform(get(ME_URL).with(employee()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$").isEmpty());
+
+    verify(myEnrollmentQueryService).findMine(7L, null);
+  }
+
+  @Test
+  void myEnrollments_ignoresEmployeeIdQueryParam() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, null)).willReturn(Collections.emptyList());
+
+    mockMvc
+        .perform(get(ME_URL).param("employeeId", "99").header("X-Employee-Id", 99).with(employee()))
+        .andExpect(status().isOk());
+
+    verify(myEnrollmentQueryService).findMine(7L, null);
+    verify(myEnrollmentQueryService, never()).findMine(eq(99L), any());
+  }
+
+  @Test
+  void myEnrollments_withStatus_passesStatus() throws Exception {
+    given(myEnrollmentQueryService.findMine(7L, EnrollmentStatus.WAITING))
+        .willReturn(Collections.emptyList());
+
+    mockMvc
+        .perform(get(ME_URL).param("status", "WAITING").with(employee()))
+        .andExpect(status().isOk());
+
+    verify(myEnrollmentQueryService).findMine(7L, EnrollmentStatus.WAITING);
+  }
+
+  @Test
+  void myEnrollments_invalidStatus_returns400InvalidRequest() throws Exception {
+    mockMvc
+        .perform(get(ME_URL).param("status", "FOO").with(employee()))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+    verifyNoInteractions(myEnrollmentQueryService);
+  }
+
+  @Test
+  void myEnrollments_noToken_returns401() throws Exception {
+    mockMvc
+        .perform(get(ME_URL))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+    verifyNoInteractions(myEnrollmentQueryService);
+  }
+
+  // ---- 신청 취소 (FR-06) ----
+
+  private static final String CANCEL_URL = "/api/me/enrollments/100/cancel";
+
+  @Test
+  void cancel_returns200Cancelled() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willReturn(response(EnrollmentStatus.CANCELLED));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("CANCELLED"))
+        .andExpect(jsonPath("$", hasKey("waitingNumber")))
+        .andExpect(jsonPath("$.waitingNumber").isEmpty());
+
+    ArgumentCaptor<Long> enrollmentId = ArgumentCaptor.forClass(Long.class);
+    ArgumentCaptor<Long> employeeId = ArgumentCaptor.forClass(Long.class);
+    verify(enrollmentCommandService).cancel(enrollmentId.capture(), employeeId.capture());
+    assertThat(enrollmentId.getValue()).isEqualTo(100L);
+    assertThat(employeeId.getValue()).isEqualTo(7L);
+  }
+
+  @Test
+  void cancel_ignoresEmployeeIdParamAndHeader_usesTokenSubject() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willReturn(response(EnrollmentStatus.CANCELLED));
+
+    mockMvc
+        .perform(
+            post(CANCEL_URL).param("employeeId", "99").header("X-Employee-Id", 99).with(employee()))
+        .andExpect(status().isOk());
+
+    verify(enrollmentCommandService).cancel(100L, 7L);
+    verify(enrollmentCommandService, never()).cancel(anyLong(), eq(99L));
+  }
+
+  @Test
+  void cancel_noToken_returns401() throws Exception {
+    mockMvc
+        .perform(post(CANCEL_URL))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+    verifyNoInteractions(enrollmentCommandService);
+  }
+
+  @Test
+  void cancel_nonNumericId_returns400InvalidRequest() throws Exception {
+    mockMvc
+        .perform(post("/api/me/enrollments/abc/cancel").with(employee()))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+    verifyNoInteractions(enrollmentCommandService);
+  }
+
+  @Test
+  void cancel_notFound_returns404() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new EnrollmentNotFoundException(100L));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_NOT_FOUND"));
+  }
+
+  @Test
+  void cancel_alreadyCancelled_returns409() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new EnrollmentAlreadyCancelledException(100L));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_ALREADY_CANCELLED"));
+  }
+
+  @Test
+  void cancel_notCancellable_returns409() throws Exception {
+    // HTTP 매핑만 확인한다. 실제로 이 예외가 나는 상태(FR-08의 수료 등)는 아직 없어 상태 값은 의미가 없다.
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new EnrollmentNotCancellableException(100L, EnrollmentStatus.CONFIRMED));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_NOT_CANCELLABLE"));
+  }
+
+  @Test
+  void cancel_deadlinePassed_returns409() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L))
+        .willThrow(new CancelDeadlinePassedException(LocalDate.of(2026, 12, 1)));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("CANCEL_DEADLINE_PASSED"));
+  }
+
+  @Test
+  void cancel_sessionClosed_returns409() throws Exception {
+    given(enrollmentCommandService.cancel(100L, 7L)).willThrow(new SessionClosedException(1L));
+
+    mockMvc
+        .perform(post(CANCEL_URL).with(employee()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("SESSION_CLOSED"));
+  }
+
+  private static MyEnrollmentResponse myResponse(EnrollmentStatus status, long preceding) {
+    return MyEnrollmentResponse.from(
+        new MyEnrollmentRow(
+            100L,
+            1L,
+            "Java 기초",
+            LocalDate.of(2026, 12, 1),
+            "본사",
+            status,
+            LocalDateTime.of(2026, 11, 1, 9, 0),
+            preceding));
+  }
+
   private static SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor employee() {
     return jwt().jwt(j -> j.subject("7").claim("role", "EMPLOYEE"));
   }
 
   private EnrollmentResponse response(EnrollmentStatus status) {
+    return EnrollmentResponse.from(enrollment(status));
+  }
+
+  private EnrollmentResponse waitingResponse(int waitingNumber) {
+    return EnrollmentResponse.waiting(enrollment(EnrollmentStatus.WAITING), waitingNumber);
+  }
+
+  private Enrollment enrollment(EnrollmentStatus status) {
     Course course = Course.create("Java 기초", "개발", "입문");
     CourseSession session = CourseSession.create(course, LocalDate.of(2026, 12, 1), "본사", 10);
     ReflectionTestUtils.setField(session, "id", 1L);
     Enrollment enrollment = Enrollment.create(session, 7L, status);
     ReflectionTestUtils.setField(enrollment, "id", 100L);
-    return EnrollmentResponse.from(enrollment);
+    return enrollment;
   }
 }

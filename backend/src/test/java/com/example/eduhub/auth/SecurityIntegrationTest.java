@@ -17,6 +17,7 @@ import com.example.eduhub.course.dto.CourseRequest;
 import com.example.eduhub.course.repository.CourseRepository;
 import com.example.eduhub.course.repository.CourseSessionRepository;
 import com.example.eduhub.enrollment.domain.Enrollment;
+import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -192,6 +193,25 @@ class SecurityIntegrationTest {
   }
 
   @Test
+  void cancel_otherEmployeesEnrollment_returns404AndKeepsStatus() throws Exception {
+    String hash = passwordEncoder.encode(PASSWORD);
+    employeeRepository.save(Employee.create("T0002", "다른사원", hash, Role.EMPLOYEE));
+    Enrollment enrollmentOfA =
+        enrollmentRepository.save(
+            Enrollment.create(session, employee.getId(), EnrollmentStatus.CONFIRMED));
+
+    mockMvc
+        .perform(
+            post("/api/me/enrollments/{id}/cancel", enrollmentOfA.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + login("T0002", PASSWORD)))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("ENROLLMENT_NOT_FOUND"));
+
+    assertThat(enrollmentRepository.findById(enrollmentOfA.getId()).get().getStatus())
+        .isEqualTo(EnrollmentStatus.CONFIRMED);
+  }
+
+  @Test
   void createCourse_noToken_401() throws Exception {
     mockMvc
         .perform(courseRequest(null))
@@ -226,6 +246,26 @@ class SecurityIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + login(EMP_NO, PASSWORD)))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  void adminRoster_employeeToken_returns403() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/sessions/{id}/roster", session.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + login(EMP_NO, PASSWORD)))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+  }
+
+  @Test
+  void adminRoster_adminToken_returns200() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/admin/sessions/{id}/roster", session.getId())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + login(ADMIN_NO, PASSWORD)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.sessionId").value(session.getId()));
   }
 
   @Test
