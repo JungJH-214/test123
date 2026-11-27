@@ -55,6 +55,14 @@ public class Enrollment {
     return new Enrollment(session, employeeId, status);
   }
 
+  /** 수료 처리한다. 확정(CONFIRMED) 상태에서만 가능하다 (FR-08). */
+  public void complete() {
+    if (status != EnrollmentStatus.CONFIRMED) {
+      throw new IllegalStateException("확정 상태만 수료 처리할 수 있습니다. 현재 상태: " + status);
+    }
+    this.status = EnrollmentStatus.COMPLETED;
+  }
+
   /** 취소할 수 있는 상태인지 검사한다. 이미 취소됐거나 확정·대기가 아니면 예외. */
   public void checkCancellable() {
     if (status == EnrollmentStatus.CANCELLED) {

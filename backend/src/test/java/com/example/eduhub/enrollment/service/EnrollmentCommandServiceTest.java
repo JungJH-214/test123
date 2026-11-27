@@ -3,6 +3,8 @@ package com.example.eduhub.enrollment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
@@ -31,6 +33,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
@@ -38,6 +43,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -128,6 +134,31 @@ class EnrollmentCommandServiceTest {
     assertThatThrownBy(() -> service.enroll(SESSION_ID, EMPLOYEE_ID))
         .isInstanceOf(SessionFullException.class);
     verify(enrollmentRepository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void enroll_confirmedPlusCompletedOneBelowCapacity_confirmed() {
+    givenSession(2);
+    givenCounts(1, 0);
+    givenSaveReturnsArgument();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(response.getWaitingNumber()).isNull();
+  }
+
+  @Test
+  void enroll_confirmedPlusCompletedFillCapacity_waiting() {
+    givenSession(2);
+    // 확정 1명 + 수료 1명 = 합계 2명이 정원을 채운다 (D-05)
+    givenCounts(2, 0);
+    givenSaveReturnsArgument();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(response.getWaitingNumber()).isEqualTo(1);
   }
 
   @Test
@@ -231,8 +262,7 @@ class EnrollmentCommandServiceTest {
     CourseSession session = givenSession(10);
     Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
     Enrollment waiting = Enrollment.create(session, 8L, EnrollmentStatus.WAITING);
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
-        .willReturn(9L);
+    givenSeatsTaken(9L);
     given(
             enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
                 SESSION_ID, EnrollmentStatus.WAITING))
@@ -259,8 +289,7 @@ class EnrollmentCommandServiceTest {
   void cancel_confirmedNoWaiting_noPromotion() {
     CourseSession session = givenSession(10);
     Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
-        .willReturn(9L);
+    givenSeatsTaken(9L);
     given(
             enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
                 SESSION_ID, EnrollmentStatus.WAITING))
@@ -276,13 +305,13 @@ class EnrollmentCommandServiceTest {
   void cancel_waiting_countsButNoPromotionWhenFull() {
     CourseSession session = givenSession(10);
     Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
-        .willReturn(10L);
+    givenSeatsTaken(10L);
 
     service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
 
     assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
-    verify(enrollmentRepository).countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED);
+    verify(enrollmentRepository)
+        .countBySessionIdAndStatusIn(eq(SESSION_ID), argThat(isSeatStatuses()));
     verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
     verify(enrollmentRepository, times(1)).flush(); // 취소 직후만, 승급 없음
   }
@@ -293,8 +322,7 @@ class EnrollmentCommandServiceTest {
     CourseSession session = givenSession(7);
     Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
     Enrollment first = Enrollment.create(session, 31L, EnrollmentStatus.WAITING);
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
-        .willReturn(6L);
+    givenSeatsTaken(6L);
     given(
             enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
                 SESSION_ID, EnrollmentStatus.WAITING))
@@ -417,8 +445,7 @@ class EnrollmentCommandServiceTest {
     CourseSession session = givenSession(8);
     Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
     // 취소 뒤에도 확정 9명(정원 8)
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
-        .willReturn(9L);
+    givenSeatsTaken(9L);
 
     service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
 
@@ -432,8 +459,7 @@ class EnrollmentCommandServiceTest {
     Enrollment w1 = Enrollment.create(session, 21L, EnrollmentStatus.WAITING);
     Enrollment w2 = Enrollment.create(session, 22L, EnrollmentStatus.WAITING);
     // 승급 전 확정 8, 승급(flush) 뒤 판정 시점에는 10
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
-        .willReturn(8L, 10L);
+    givenSeatsTaken(8L, 10L);
     given(
             enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
                 SESSION_ID, EnrollmentStatus.WAITING))
@@ -470,7 +496,7 @@ class EnrollmentCommandServiceTest {
     InOrder order = inOrder(enrollmentRepository);
     order
         .verify(enrollmentRepository)
-        .countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED);
+        .countBySessionIdAndStatusIn(eq(SESSION_ID), argThat(isSeatStatuses()));
     order
         .verify(enrollmentRepository)
         .findFirstBySessionIdAndStatusOrderByIdAsc(SESSION_ID, EnrollmentStatus.WAITING);
@@ -481,7 +507,37 @@ class EnrollmentCommandServiceTest {
     order.verify(enrollmentRepository).flush();
     order
         .verify(enrollmentRepository)
-        .countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED);
+        .countBySessionIdAndStatusIn(eq(SESSION_ID), argThat(isSeatStatuses()));
+  }
+
+  @Test
+  void enroll_seatsFilledByCompleted_noPromotionAndNewApplicantWaits() {
+    // 정원 10, 확정 7 + 수료 3 = 10 (D-05). 대기 3명이 있어도 승급하지 않는다.
+    givenSession(10);
+    givenSeatsTaken(10L);
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.WAITING))
+        .willReturn(3L);
+    givenSaveReturnsArgument();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
+    verify(enrollmentRepository, never()).flush();
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(response.getWaitingNumber()).isEqualTo(4);
+  }
+
+  @Test
+  void enroll_seatsFilledByCompletedAndWaitingFull_throwsSessionFull_noPromotion() {
+    givenSession(10);
+    givenSeatsTaken(10L);
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.WAITING))
+        .willReturn(5L);
+
+    assertThatThrownBy(() -> service.enroll(SESSION_ID, EMPLOYEE_ID))
+        .isInstanceOf(SessionFullException.class);
+    verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
+    verify(enrollmentRepository, never()).saveAndFlush(any());
   }
 
   @Test
@@ -521,12 +577,30 @@ class EnrollmentCommandServiceTest {
     return session;
   }
 
+  private void givenSeatsTaken(Long first, Long... rest) {
+    given(
+            enrollmentRepository.countBySessionIdAndStatusIn(
+                eq(SESSION_ID), argThat(isSeatStatuses())))
+        .willReturn(first, rest);
+  }
+
   private void givenCounts(long confirmed, long waiting) {
-    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+    given(
+            enrollmentRepository.countBySessionIdAndStatusIn(
+                eq(SESSION_ID), argThat(isSeatStatuses())))
         .willReturn(confirmed);
     lenient()
         .when(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.WAITING))
         .thenReturn(waiting);
+  }
+
+  /** CONFIRMED와 COMPLETED를 순서와 컬렉션 타입에 상관없이 정확히 포함하는지 본다. */
+  private static ArgumentMatcher<Collection<EnrollmentStatus>> isSeatStatuses() {
+    return statuses ->
+        statuses != null
+            && statuses.size() == 2
+            && new HashSet<>(statuses)
+                .equals(EnumSet.of(EnrollmentStatus.CONFIRMED, EnrollmentStatus.COMPLETED));
   }
 
   private void givenSaveReturnsArgument() {

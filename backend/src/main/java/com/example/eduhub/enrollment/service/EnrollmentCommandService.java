@@ -1,5 +1,6 @@
 package com.example.eduhub.enrollment.service;
 
+import com.example.eduhub.common.time.BusinessTime;
 import com.example.eduhub.course.domain.CourseSession;
 import com.example.eduhub.course.exception.SessionClosedException;
 import com.example.eduhub.course.exception.SessionNotFoundException;
@@ -15,7 +16,8 @@ import com.example.eduhub.enrollment.repository.EnrollmentConstraints;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneId;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -36,17 +38,21 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>승급 규칙: 대기 중 신청 id가 가장 작은 신청(D-04 1순위)부터 확정 수가 정원보다 적은 동안 반복해 확정한다. 신청할 때도 판정 전에 먼저 승급해서 새 신청이
  * 대기자를 앞지르지 않게 한다.
+ *
+ * <p>확정 수(D-05): 신청 판정과 승급 모두 {@link #countSeatsTaken}으로 센다. 확정(CONFIRMED)과 수료(COMPLETED) 합계이며, 수료
+ * 처리로는 자리가 비지 않는다. 두 곳이 다른 기준을 쓰면 수료자가 있는 회차에서 정원을 넘겨 승급하므로 이 메서드 하나만 쓴다.
  */
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class EnrollmentCommandService {
 
+  private static final List<EnrollmentStatus> SEAT_STATUSES =
+      Arrays.asList(EnrollmentStatus.CONFIRMED, EnrollmentStatus.COMPLETED);
+
   private final CourseSessionRepository courseSessionRepository;
   private final EnrollmentRepository enrollmentRepository;
   private final Clock clock;
-
-  private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Seoul");
 
   public EnrollmentResponse enroll(Long sessionId, Long employeeId) {
     CourseSession session =
@@ -98,7 +104,7 @@ public class EnrollmentCommandService {
   }
 
   private void checkDeadline(CourseSession session) {
-    LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+    LocalDate today = LocalDate.now(clock.withZone(BusinessTime.ZONE));
     if (today.isAfter(session.getStartDate().minusDays(1))) {
       throw new CancelDeadlinePassedException(session.getStartDate());
     }
@@ -125,9 +131,9 @@ public class EnrollmentCommandService {
     }
   }
 
-  /** 정원을 차지하는 상태. FR-08이 수료(COMPLETED)를 추가하면 여기서 함께 센다. */
+  /** 정원을 차지한 수. 확정(CONFIRMED)과 수료(COMPLETED) 합계다 (D-05). 신청 판정과 승급이 함께 쓴다. */
   private long countSeatsTaken(Long sessionId) {
-    return enrollmentRepository.countBySessionIdAndStatus(sessionId, EnrollmentStatus.CONFIRMED);
+    return enrollmentRepository.countBySessionIdAndStatusIn(sessionId, SEAT_STATUSES);
   }
 
   private Decision decide(CourseSession session) {

@@ -6,6 +6,7 @@ import com.example.eduhub.course.domain.Course;
 import com.example.eduhub.course.domain.CourseSession;
 import com.example.eduhub.course.repository.CourseRepository;
 import com.example.eduhub.course.repository.CourseSessionRepository;
+import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import com.example.eduhub.enrollment.dto.EnrollmentResponse;
 import com.example.eduhub.enrollment.exception.EnrollmentAlreadyCancelledException;
@@ -243,6 +244,37 @@ class EnrollmentCancelConcurrencyTest {
     assertThat(again.getWaitingNumber()).isEqualTo((int) waitingBefore + 1);
   }
 
+  /**
+   * D-05: 정원 2, 수료 1 + 확정 1 + 대기 2에서 확정 1명이 취소하면 대기자 1명만 승급한다. 승급 판정이 확정만 세면 수료자 몫까지 승급해 합계가 3이 되므로
+   * 이 테스트는 실패해야 한다.
+   */
+  @Test
+  void cancelConfirmed_withCompletedAndTwoWaiting_promotesOnlyOne_seatsTotalStaysAtCapacity() {
+    Long sessionId = saveSession(2);
+    CourseSession session =
+        courseSessionRepository.findById(sessionId).orElseThrow(IllegalStateException::new);
+    Long completedId = saveEnrollment(session, 1L, EnrollmentStatus.COMPLETED);
+    Long confirmedId = saveEnrollment(session, 2L, EnrollmentStatus.CONFIRMED);
+    Long firstWaitingId = saveEnrollment(session, 3L, EnrollmentStatus.WAITING);
+    Long secondWaitingId = saveEnrollment(session, 4L, EnrollmentStatus.WAITING);
+
+    enrollmentCommandService.cancel(confirmedId, 2L);
+
+    assertThat(statusOf(confirmedId)).isEqualTo(EnrollmentStatus.CANCELLED);
+    assertThat(statusOf(completedId)).isEqualTo(EnrollmentStatus.COMPLETED);
+    assertThat(statusOf(firstWaitingId)).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(statusOf(secondWaitingId)).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(count(sessionId, EnrollmentStatus.CONFIRMED)).isEqualTo(1);
+    assertThat(count(sessionId, EnrollmentStatus.COMPLETED)).isEqualTo(1);
+    assertThat(count(sessionId, EnrollmentStatus.WAITING)).isEqualTo(1);
+  }
+
+  private Long saveEnrollment(CourseSession session, Long employeeId, EnrollmentStatus status) {
+    return enrollmentRepository
+        .saveAndFlush(Enrollment.create(session, employeeId, status))
+        .getId();
+  }
+
   /** 정원 10, 확정 10(사원 1~10), 대기 5(사원 11~15)를 순서대로 신청해 만든다. 사원 ID별 신청 ID를 돌려준다. */
   private Map<Long, Long> prepare(Long sessionId) {
     Map<Long, Long> ids = new HashMap<>();
@@ -256,11 +288,15 @@ class EnrollmentCancelConcurrencyTest {
   }
 
   private Long saveSession() {
+    return saveSession(CAPACITY);
+  }
+
+  private Long saveSession(int capacity) {
     Course course = courseRepository.save(Course.create("취소 동시성 과정", "개발", null));
     courseIds.add(course.getId());
     LocalDate startDate = LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(30);
     CourseSession session =
-        courseSessionRepository.save(CourseSession.create(course, startDate, "본사", CAPACITY));
+        courseSessionRepository.save(CourseSession.create(course, startDate, "본사", capacity));
     sessionIds.add(session.getId());
     return session.getId();
   }

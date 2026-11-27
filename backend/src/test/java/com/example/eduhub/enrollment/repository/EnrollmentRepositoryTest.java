@@ -9,6 +9,8 @@ import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.hibernate.SessionFactory;
@@ -223,6 +225,28 @@ class EnrollmentRepositoryTest {
             enrollmentRepository.countBySessionIdAndStatus(a.getId(), EnrollmentStatus.CONFIRMED))
         .isEqualTo(2);
     assertThat(enrollmentRepository.countBySessionIdAndStatus(a.getId(), EnrollmentStatus.WAITING))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void countBySessionIdAndStatusIn_sumsGivenStatusesForSessionOnly() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession a = newSession(course);
+    CourseSession b = newSession(course);
+    em.persist(Enrollment.create(a, 1L, EnrollmentStatus.CONFIRMED));
+    em.persist(Enrollment.create(a, 2L, EnrollmentStatus.COMPLETED));
+    em.persist(Enrollment.create(a, 3L, EnrollmentStatus.WAITING));
+    em.persist(Enrollment.create(b, 4L, EnrollmentStatus.COMPLETED));
+    em.flush();
+    em.clear();
+
+    assertThat(
+            enrollmentRepository.countBySessionIdAndStatusIn(
+                a.getId(), Arrays.asList(EnrollmentStatus.CONFIRMED, EnrollmentStatus.COMPLETED)))
+        .isEqualTo(2);
+    assertThat(
+            enrollmentRepository.countBySessionIdAndStatusIn(
+                a.getId(), Collections.singletonList(EnrollmentStatus.WAITING)))
         .isEqualTo(1);
   }
 
