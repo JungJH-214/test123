@@ -7,7 +7,7 @@ import { RequireAuth } from './auth/RequireAuth';
 import { AdminRoutes } from './pages/admin/AdminApp';
 import { CourseDetailPage } from './pages/CourseDetailPage';
 import { CourseListPage } from './pages/CourseListPage';
-import { MyEnrollmentsPage } from './pages/MyEnrollmentsPage';
+import { MyEnrollmentsPage } from './enrollment/MyEnrollmentsPage';
 
 export const MY_ENROLLMENTS_PATH = '/my/enrollments';
 
@@ -17,7 +17,7 @@ export function App() {
       <TopBar />
       <Routes>
         <Route path="/" element={<CourseListPage />} />
-        <Route path="/courses/:id" element={<CourseDetailPage />} />
+        <Route path="/courses/:courseId" element={<CourseDetailPage />} />
         <Route path={LOGIN_PATH} element={<LoginPage />} />
         <Route
           path={MY_ENROLLMENTS_PATH}
