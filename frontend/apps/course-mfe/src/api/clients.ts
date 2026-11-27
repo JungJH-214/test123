@@ -11,10 +11,7 @@ export const apiConfiguration = new Configuration({ basePath: '' });
 /** 로그인과 현재 사용자 확인 (NFR-03). */
 export const authApi = new AuthApi(apiConfiguration, undefined, http);
 
-/**
- * GET /api/me. 백엔드 스펙이 `@AuthenticationPrincipal Jwt`를 쿼리 파라미터로 노출해 생성 메서드가 jwt를 요구한다.
- * 빈 객체를 넘기면 쿼리가 붙지 않는다. 백엔드에서 그 파라미터를 숨기고 재생성하면 이 우회를 지운다.
- */
+/** GET /api/me. 새로고침 뒤 저장된 토큰이 유효한지 확인한다. */
 export function fetchMe() {
-  return authApi.me({ jwt: {} });
+  return authApi.me();
 }
