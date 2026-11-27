@@ -38,7 +38,11 @@ Spring Boot API 서버. 명령은 모두 `backend/`에서 실행한다.
 ## 프로필
 - **dev (기본):** 로컬 PostgreSQL(`localhost:5432/eduhub`)에 접속한다. 루트 `.env`를 `spring.config.import`로 읽고, 실제 환경 변수가 있으면 그 값이 우선한다
 - **test:** H2(PostgreSQL 모드)를 쓴다. `@SpringBootTest`에는 `@ActiveProfiles("test")`를 붙인다
-- **pgtest:** 리포지토리 테스트(`@DataJpaTest` + `replace = NONE`)는 로컬 PostgreSQL의 `eduhub_test`를 쓴다. 그래서 `./gradlew test`를 돌리려면 로컬 PG와 루트 `.env`가 있어야 한다
+- **pgtest:** 리포지토리 테스트(`@DataJpaTest` + `replace = NONE`)와 동시성 테스트는 로컬 PostgreSQL을 쓴다. 그래서 `./gradlew test`를 돌리려면 로컬 PG와 루트 `.env`가 있어야 한다. worktree에서는 worktree 루트에 `.env`를 복사해 둔다
+- **pgtest DB 격리:** worktree마다 다른 테스트 DB를 쓴다. 같은 DB를 공유하면 테스트 정리(`deleteAllInBatch`)가 서로 데이터를 지우고, 브랜치마다 다른 Flyway 버전이 충돌한다
+  - DB 이름은 Gradle `test` 작업이 정한다. 우선순위: 환경 변수 `POSTGRES_TEST_DB` > worktree 이름(`.claude/worktrees/<이름>` → `eduhub_test_<이름>`, `-`는 `_`) > `.env`의 `POSTGRES_TEST_DB` > `eduhub_test`. 실행 시 `pgtest DB: ...`로 출력한다
+  - DB가 없으면 테스트 전에 `CREATE DATABASE`로 만든다(`.env` 계정에 CREATEDB 권한 필요). 실패하면 경고만 내고 테스트를 계속한다
+  - worktree를 지운 뒤 남은 DB는 직접 지운다: `psql -U <user> -d postgres -c "DROP DATABASE eduhub_test_<이름>"`
 - **H2 한계:** H2는 락 동작이 PostgreSQL과 다르다. 동시성 테스트(NFR-01)는 Docker가 준비되면 Testcontainers로 옮긴다
 
 ## Windows 환경 주의
