@@ -227,7 +227,7 @@ class EnrollmentRepositoryTest {
   }
 
   @Test
-  void existsBySessionIdAndEmployeeId_trueOnlyForSameSessionAndEmployee() {
+  void existsBySessionIdAndEmployeeIdAndStatusNot_trueOnlyForSameSessionAndEmployee() {
     Course course = em.persist(Course.create("Java 기초", "개발", null));
     CourseSession a = newSession(course);
     CourseSession b = newSession(course);
@@ -235,9 +235,14 @@ class EnrollmentRepositoryTest {
     em.flush();
     em.clear();
 
-    assertThat(enrollmentRepository.existsBySessionIdAndEmployeeId(a.getId(), 1L)).isTrue();
-    assertThat(enrollmentRepository.existsBySessionIdAndEmployeeId(a.getId(), 2L)).isFalse();
-    assertThat(enrollmentRepository.existsBySessionIdAndEmployeeId(b.getId(), 1L)).isFalse();
+    assertThat(existsActive(a.getId(), 1L)).isTrue();
+    assertThat(existsActive(a.getId(), 2L)).isFalse();
+    assertThat(existsActive(b.getId(), 1L)).isFalse();
+  }
+
+  private boolean existsActive(Long sessionId, Long employeeId) {
+    return enrollmentRepository.existsBySessionIdAndEmployeeIdAndStatusNot(
+        sessionId, employeeId, EnrollmentStatus.CANCELLED);
   }
 
   @Test

@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.example.eduhub.course.domain.Course;
@@ -16,17 +19,24 @@ import com.example.eduhub.course.repository.CourseSessionRepository;
 import com.example.eduhub.enrollment.domain.Enrollment;
 import com.example.eduhub.enrollment.domain.EnrollmentStatus;
 import com.example.eduhub.enrollment.dto.EnrollmentResponse;
+import com.example.eduhub.enrollment.exception.CancelDeadlinePassedException;
 import com.example.eduhub.enrollment.exception.DuplicateEnrollmentException;
+import com.example.eduhub.enrollment.exception.EnrollmentAlreadyCancelledException;
+import com.example.eduhub.enrollment.exception.EnrollmentNotFoundException;
 import com.example.eduhub.enrollment.exception.SessionFullException;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
 import java.sql.SQLException;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -40,7 +50,19 @@ class EnrollmentCommandServiceTest {
 
   @Mock private CourseSessionRepository courseSessionRepository;
   @Mock private EnrollmentRepository enrollmentRepository;
-  @InjectMocks private EnrollmentCommandService service;
+  private EnrollmentCommandService service;
+
+  @BeforeEach
+  void setUp() {
+    service = serviceAt("2026-11-27T00:00:00Z");
+  }
+
+  private EnrollmentCommandService serviceAt(String instant) {
+    return new EnrollmentCommandService(
+        courseSessionRepository,
+        enrollmentRepository,
+        Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
+  }
 
   @Test
   void enroll_seatAvailable_confirmed() {
@@ -128,7 +150,9 @@ class EnrollmentCommandServiceTest {
   @Test
   void enroll_alreadyEnrolled_throwsDuplicate() {
     givenSession(10);
-    given(enrollmentRepository.existsBySessionIdAndEmployeeId(SESSION_ID, EMPLOYEE_ID))
+    given(
+            enrollmentRepository.existsBySessionIdAndEmployeeIdAndStatusNot(
+                SESSION_ID, EMPLOYEE_ID, EnrollmentStatus.CANCELLED))
         .willReturn(true);
 
     assertThatThrownBy(() -> service.enroll(SESSION_ID, EMPLOYEE_ID))
@@ -185,9 +209,276 @@ class EnrollmentCommandServiceTest {
     verify(courseSessionRepository, never()).findById(any());
   }
 
+  // ---- FR-06 취소·승급 ----
+
+  private static final Long ENROLLMENT_ID = 100L;
+
+  @Test
+  void cancel_notOwnedOrMissing_throwsNotFound() {
+    given(enrollmentRepository.findSessionIdByIdAndEmployeeId(ENROLLMENT_ID, EMPLOYEE_ID))
+        .willReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(EnrollmentNotFoundException.class);
+    verify(courseSessionRepository, never()).findByIdForUpdate(any());
+    verify(enrollmentRepository, never()).findByIdAndEmployeeId(any(), any());
+  }
+
+  @Test
+  void cancel_confirmedWithWaiting_promotesFirstWaiting() {
+    CourseSession session = givenSession(10);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
+    Enrollment waiting = Enrollment.create(session, 8L, EnrollmentStatus.WAITING);
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+        .willReturn(9L);
+    given(
+            enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
+                SESSION_ID, EnrollmentStatus.WAITING))
+        .willReturn(Optional.of(waiting));
+
+    EnrollmentResponse response = service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
+
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+    assertThat(waiting.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+    assertThat(response.getWaitingNumber()).isNull();
+    verify(enrollmentRepository, times(1))
+        .findFirstBySessionIdAndStatusOrderByIdAsc(SESSION_ID, EnrollmentStatus.WAITING);
+    verify(enrollmentRepository).flush();
+    // 락 전에는 회차 ID만 읽고, 락 뒤에 신청 엔티티를 읽는다
+    InOrder order = inOrder(enrollmentRepository, courseSessionRepository);
+    order.verify(enrollmentRepository).findSessionIdByIdAndEmployeeId(ENROLLMENT_ID, EMPLOYEE_ID);
+    order.verify(courseSessionRepository).findByIdForUpdate(SESSION_ID);
+    order.verify(enrollmentRepository).findByIdAndEmployeeId(ENROLLMENT_ID, EMPLOYEE_ID);
+    verify(courseSessionRepository, never()).findById(any());
+  }
+
+  @Test
+  void cancel_confirmedNoWaiting_noPromotion() {
+    CourseSession session = givenSession(10);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+        .willReturn(9L);
+    given(
+            enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
+                SESSION_ID, EnrollmentStatus.WAITING))
+        .willReturn(Optional.empty());
+
+    service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
+
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+    verify(enrollmentRepository, never()).flush();
+  }
+
+  @Test
+  void cancel_waiting_noPromotionLookup() {
+    CourseSession session = givenSession(10);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
+
+    service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
+
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+    verify(enrollmentRepository, never()).countBySessionIdAndStatus(any(), any());
+    verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
+  }
+
+  @Test
+  void cancel_dayBeforeStart_succeeds() {
+    // 시작일 2026-12-01, 서울 2026-11-30 23:59:59
+    service = serviceAt("2026-11-30T14:59:59Z");
+    CourseSession session = givenSession(10);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
+
+    service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
+
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void cancel_onStartDate_throwsDeadlinePassed_noStateChange() {
+    // 서울 2026-12-01 00:00:00
+    service = serviceAt("2026-11-30T15:00:00Z");
+    CourseSession session = givenSession(10);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(CancelDeadlinePassedException.class);
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
+  }
+
+  @Test
+  void cancel_usesSeoulDate() {
+    // UTC 2026-12-09T15:30Z = 서울 12-10 00:30
+    service = serviceAt("2026-12-09T15:30:00Z");
+    CourseSession session = givenSession(10, LocalDate.of(2026, 12, 11));
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
+
+    service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
+
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void cancel_usesSeoulDate_startOnSeoulToday_throwsDeadlinePassed() {
+    service = serviceAt("2026-12-09T15:30:00Z");
+    CourseSession session = givenSession(10, LocalDate.of(2026, 12, 10));
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.WAITING);
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(CancelDeadlinePassedException.class);
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
+  }
+
+  @Test
+  void cancel_closedSession_throwsSessionClosed() {
+    CourseSession session = givenSession(10);
+    session.close();
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(SessionClosedException.class);
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+  }
+
+  @Test
+  void cancel_alreadyCancelled_throwsAlreadyCancelled() {
+    CourseSession session = givenSession(10);
+    givenEnrollment(session, EnrollmentStatus.CANCELLED);
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(EnrollmentAlreadyCancelledException.class);
+    verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
+  }
+
+  @Test
+  void cancel_alreadyCancelledAndDeadlinePassed_throwsAlreadyCancelled() {
+    service = serviceAt("2026-11-30T15:00:00Z");
+    CourseSession session = givenSession(10);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CANCELLED);
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(EnrollmentAlreadyCancelledException.class);
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void cancel_closedSessionAndAlreadyCancelled_throwsSessionClosed() {
+    CourseSession session = givenSession(10);
+    session.close();
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CANCELLED);
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(SessionClosedException.class);
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+  }
+
+  @Test
+  void cancel_closedSessionAndDeadlinePassed_throwsSessionClosed() {
+    service = serviceAt("2026-11-30T15:00:00Z");
+    CourseSession session = givenSession(10);
+    session.close();
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
+
+    assertThatThrownBy(() -> service.cancel(ENROLLMENT_ID, EMPLOYEE_ID))
+        .isInstanceOf(SessionClosedException.class);
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+  }
+
+  @Test
+  void cancel_confirmedOverCapacity_noPromotion() {
+    CourseSession session = givenSession(8);
+    Enrollment mine = givenEnrollment(session, EnrollmentStatus.CONFIRMED);
+    // 취소 뒤에도 확정 9명(정원 8)
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+        .willReturn(9L);
+
+    service.cancel(ENROLLMENT_ID, EMPLOYEE_ID);
+
+    assertThat(mine.getStatus()).isEqualTo(EnrollmentStatus.CANCELLED);
+    verify(enrollmentRepository, never()).findFirstBySessionIdAndStatusOrderByIdAsc(any(), any());
+  }
+
+  @Test
+  void enroll_freeSeatsWithWaiting_promotesWaitingFirst() {
+    CourseSession session = givenSession(10);
+    Enrollment w1 = Enrollment.create(session, 21L, EnrollmentStatus.WAITING);
+    Enrollment w2 = Enrollment.create(session, 22L, EnrollmentStatus.WAITING);
+    // 승급 전 확정 8, 승급(flush) 뒤 판정 시점에는 10
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED))
+        .willReturn(8L, 10L);
+    given(
+            enrollmentRepository.findFirstBySessionIdAndStatusOrderByIdAsc(
+                SESSION_ID, EnrollmentStatus.WAITING))
+        .willReturn(Optional.of(w1), Optional.of(w2));
+    given(enrollmentRepository.countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.WAITING))
+        .willReturn(0L);
+    givenSaveReturnsArgument();
+    // flush 시점에 승급(상태 전이)이 이미 끝났는지, w1이 먼저 승급됐는지 기록한다
+    EnrollmentStatus[] atFlush = new EnrollmentStatus[2];
+    doAnswer(
+            invocation -> {
+              atFlush[0] = w1.getStatus();
+              atFlush[1] = w2.getStatus();
+              return null;
+            })
+        .when(enrollmentRepository)
+        .flush();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    assertThat(w1.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(w2.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    assertThat(atFlush).containsExactly(EnrollmentStatus.CONFIRMED, EnrollmentStatus.CONFIRMED);
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.WAITING);
+    assertThat(response.getWaitingNumber()).isEqualTo(1);
+    verify(enrollmentRepository).flush();
+    // 첫 확정 집계 -> 승급 조회 2회 -> flush -> decide의 두 번째 확정 집계
+    InOrder order = inOrder(enrollmentRepository);
+    order
+        .verify(enrollmentRepository)
+        .countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED);
+    order
+        .verify(enrollmentRepository, times(2))
+        .findFirstBySessionIdAndStatusOrderByIdAsc(SESSION_ID, EnrollmentStatus.WAITING);
+    order.verify(enrollmentRepository).flush();
+    order
+        .verify(enrollmentRepository)
+        .countBySessionIdAndStatus(SESSION_ID, EnrollmentStatus.CONFIRMED);
+  }
+
+  @Test
+  void enroll_afterCancel_notDuplicate() {
+    givenSession(10);
+    givenCounts(0, 0);
+    givenSaveReturnsArgument();
+
+    EnrollmentResponse response = service.enroll(SESSION_ID, EMPLOYEE_ID);
+
+    assertThat(response.getStatus()).isEqualTo(EnrollmentStatus.CONFIRMED);
+    verify(enrollmentRepository)
+        .existsBySessionIdAndEmployeeIdAndStatusNot(
+            SESSION_ID, EMPLOYEE_ID, EnrollmentStatus.CANCELLED);
+    verify(enrollmentRepository).saveAndFlush(any(Enrollment.class));
+  }
+
+  private Enrollment givenEnrollment(CourseSession session, EnrollmentStatus status) {
+    Enrollment enrollment = Enrollment.create(session, EMPLOYEE_ID, status);
+    ReflectionTestUtils.setField(enrollment, "id", ENROLLMENT_ID);
+    given(enrollmentRepository.findSessionIdByIdAndEmployeeId(ENROLLMENT_ID, EMPLOYEE_ID))
+        .willReturn(Optional.of(SESSION_ID));
+    given(enrollmentRepository.findByIdAndEmployeeId(ENROLLMENT_ID, EMPLOYEE_ID))
+        .willReturn(Optional.of(enrollment));
+    return enrollment;
+  }
+
   private CourseSession givenSession(int capacity) {
+    return givenSession(capacity, LocalDate.of(2026, 12, 1));
+  }
+
+  private CourseSession givenSession(int capacity, LocalDate startDate) {
     Course course = Course.create("Java 기초", "개발", "입문");
-    CourseSession session = CourseSession.create(course, LocalDate.of(2026, 12, 1), "본사", capacity);
+    CourseSession session = CourseSession.create(course, startDate, "본사", capacity);
     ReflectionTestUtils.setField(session, "id", SESSION_ID);
     given(courseSessionRepository.findByIdForUpdate(SESSION_ID)).willReturn(Optional.of(session));
     return session;

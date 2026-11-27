@@ -10,8 +10,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
-  boolean existsBySessionIdAndEmployeeId(Long sessionId, Long employeeId);
-
   boolean existsBySessionIdAndEmployeeIdAndStatusNot(
       Long sessionId, Long employeeId, EnrollmentStatus status);
 
