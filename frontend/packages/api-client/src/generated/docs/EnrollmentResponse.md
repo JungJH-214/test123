@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **employeeId** | **number** |  | [optional] [default to undefined]
 **status** | **string** |  | [optional] [default to undefined]
 **createdAt** | **string** |  | [optional] [default to undefined]
+**waitingNumber** | **number** | 대기 순번. WAITING일 때만 값이 있고(1부터), 신청 시점 기준이다 | [optional] [default to undefined]
 
 ## Example
 
@@ -22,6 +23,7 @@ const instance: EnrollmentResponse = {
     employeeId,
     status,
     createdAt,
+    waitingNumber,
 };
 ```
 

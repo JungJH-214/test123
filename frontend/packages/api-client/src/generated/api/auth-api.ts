@@ -24,8 +24,6 @@ import { BASE_PATH, COLLECTION_FORMATS, type RequestArgs, BaseAPI, RequiredError
 // @ts-ignore
 import type { ErrorResponse } from '../model';
 // @ts-ignore
-import type { Jwt } from '../model';
-// @ts-ignore
 import type { LoginRequest } from '../model';
 // @ts-ignore
 import type { LoginResponse } from '../model';
@@ -74,13 +72,10 @@ export const AuthApiAxiosParamCreator = function (configuration?: Configuration)
         /**
          * 
          * @summary 내 정보
-         * @param {Jwt} jwt 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        me: async (jwt: Jwt, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'jwt' is not null or undefined
-            assertParamExists('me', 'jwt', jwt)
+        me: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/me`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -96,12 +91,6 @@ export const AuthApiAxiosParamCreator = function (configuration?: Configuration)
             // authentication bearerAuth required
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-            if (jwt !== undefined) {
-                for (const [key, value] of Object.entries(jwt)) {
-                    localVarQueryParameter[key] = value;
-                }
-            }
 
             localVarHeaderParameter['Accept'] = '*/*';
 
@@ -139,12 +128,11 @@ export const AuthApiFp = function(configuration?: Configuration) {
         /**
          * 
          * @summary 내 정보
-         * @param {Jwt} jwt 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async me(jwt: Jwt, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UserResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.me(jwt, options);
+        async me(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UserResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.me(options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['AuthApi.me']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -171,12 +159,11 @@ export const AuthApiFactory = function (configuration?: Configuration, basePath?
         /**
          * 
          * @summary 내 정보
-         * @param {AuthApiMeRequest} requestParameters Request parameters.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        me(requestParameters: AuthApiMeRequest, options?: RawAxiosRequestConfig): AxiosPromise<UserResponse> {
-            return localVarFp.me(requestParameters.jwt, options).then((request) => request(axios, basePath));
+        me(options?: RawAxiosRequestConfig): AxiosPromise<UserResponse> {
+            return localVarFp.me(options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -186,13 +173,6 @@ export const AuthApiFactory = function (configuration?: Configuration, basePath?
  */
 export interface AuthApiLoginRequest {
     readonly loginRequest: LoginRequest
-}
-
-/**
- * Request parameters for me operation in AuthApi.
- */
-export interface AuthApiMeRequest {
-    readonly jwt: Jwt
 }
 
 /**
@@ -213,12 +193,11 @@ export class AuthApi extends BaseAPI {
     /**
      * 
      * @summary 내 정보
-     * @param {AuthApiMeRequest} requestParameters Request parameters.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public me(requestParameters: AuthApiMeRequest, options?: RawAxiosRequestConfig) {
-        return AuthApiFp(this.configuration).me(requestParameters.jwt, options).then((request) => request(this.axios, this.basePath));
+    public me(options?: RawAxiosRequestConfig) {
+        return AuthApiFp(this.configuration).me(options).then((request) => request(this.axios, this.basePath));
     }
 }
 

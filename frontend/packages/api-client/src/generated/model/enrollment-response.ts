@@ -20,11 +20,17 @@ export interface EnrollmentResponse {
     'employeeId'?: number;
     'status'?: EnrollmentResponseStatusEnum;
     'createdAt'?: string;
+    /**
+     * 대기 순번. WAITING일 때만 값이 있고(1부터), 신청 시점 기준이다
+     */
+    'waitingNumber'?: number | null;
 }
 
 export const EnrollmentResponseStatusEnum = {
     Confirmed: 'CONFIRMED',
     Waiting: 'WAITING',
+    Completed: 'COMPLETED',
+    Cancelled: 'CANCELLED',
 } as const;
 
 export type EnrollmentResponseStatusEnum = typeof EnrollmentResponseStatusEnum[keyof typeof EnrollmentResponseStatusEnum];

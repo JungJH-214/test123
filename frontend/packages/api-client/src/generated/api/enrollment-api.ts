@@ -26,7 +26,7 @@ import type { EnrollmentResponse } from '../model';
 // @ts-ignore
 import type { ErrorResponse } from '../model';
 // @ts-ignore
-import type { Jwt } from '../model';
+import type { MyEnrollmentResponse } from '../model';
 /**
  * EnrollmentApi - axios parameter creator
  */
@@ -34,17 +34,52 @@ export const EnrollmentApiAxiosParamCreator = function (configuration?: Configur
     return {
         /**
          * 
-         * @summary 수강 신청 (정원 안이면 확정, 정원이 차면 대기)
-         * @param {number} sessionId 
-         * @param {Jwt} jwt 
+         * @summary 내 신청 취소 (확정 취소 시 대기 1순위 자동 확정)
+         * @param {number} enrollmentId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        enroll: async (sessionId: number, jwt: Jwt, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        cancel: async (enrollmentId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'enrollmentId' is not null or undefined
+            assertParamExists('cancel', 'enrollmentId', enrollmentId)
+            const localVarPath = `/api/me/enrollments/{enrollmentId}/cancel`
+                .replace('{enrollmentId}', encodeURIComponent(String(enrollmentId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = '*/*';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary 수강 신청 (정원 안이면 확정, 정원이 차면 대기)
+         * @param {number} sessionId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        enroll: async (sessionId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'sessionId' is not null or undefined
             assertParamExists('enroll', 'sessionId', sessionId)
-            // verify required parameter 'jwt' is not null or undefined
-            assertParamExists('enroll', 'jwt', jwt)
             const localVarPath = `/api/v1/sessions/{sessionId}/enrollments`
                 .replace('{sessionId}', encodeURIComponent(String(sessionId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
@@ -62,10 +97,43 @@ export const EnrollmentApiAxiosParamCreator = function (configuration?: Configur
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
-            if (jwt !== undefined) {
-                for (const [key, value] of Object.entries(jwt)) {
-                    localVarQueryParameter[key] = value;
-                }
+            localVarHeaderParameter['Accept'] = '*/*';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary 내 신청 내역 조회 (최근 신청순, 대기 순번 포함)
+         * @param {MyEnrollmentsStatusEnum} [status] 신청 상태. 생략하면 전체
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        myEnrollments: async (status?: MyEnrollmentsStatusEnum, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/me/enrollments`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication bearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (status !== undefined) {
+                localVarQueryParameter['status'] = status;
             }
 
             localVarHeaderParameter['Accept'] = '*/*';
@@ -90,16 +158,41 @@ export const EnrollmentApiFp = function(configuration?: Configuration) {
     return {
         /**
          * 
-         * @summary 수강 신청 (정원 안이면 확정, 정원이 차면 대기)
-         * @param {number} sessionId 
-         * @param {Jwt} jwt 
+         * @summary 내 신청 취소 (확정 취소 시 대기 1순위 자동 확정)
+         * @param {number} enrollmentId 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async enroll(sessionId: number, jwt: Jwt, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<EnrollmentResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.enroll(sessionId, jwt, options);
+        async cancel(enrollmentId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<EnrollmentResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.cancel(enrollmentId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['EnrollmentApi.cancel']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary 수강 신청 (정원 안이면 확정, 정원이 차면 대기)
+         * @param {number} sessionId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async enroll(sessionId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<EnrollmentResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.enroll(sessionId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['EnrollmentApi.enroll']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary 내 신청 내역 조회 (최근 신청순, 대기 순번 포함)
+         * @param {MyEnrollmentsStatusEnum} [status] 신청 상태. 생략하면 전체
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async myEnrollments(status?: MyEnrollmentsStatusEnum, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<MyEnrollmentResponse>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.myEnrollments(status, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['EnrollmentApi.myEnrollments']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
     }
@@ -113,24 +206,59 @@ export const EnrollmentApiFactory = function (configuration?: Configuration, bas
     return {
         /**
          * 
+         * @summary 내 신청 취소 (확정 취소 시 대기 1순위 자동 확정)
+         * @param {EnrollmentApiCancelRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        cancel(requestParameters: EnrollmentApiCancelRequest, options?: RawAxiosRequestConfig): AxiosPromise<EnrollmentResponse> {
+            return localVarFp.cancel(requestParameters.enrollmentId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary 수강 신청 (정원 안이면 확정, 정원이 차면 대기)
          * @param {EnrollmentApiEnrollRequest} requestParameters Request parameters.
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
         enroll(requestParameters: EnrollmentApiEnrollRequest, options?: RawAxiosRequestConfig): AxiosPromise<EnrollmentResponse> {
-            return localVarFp.enroll(requestParameters.sessionId, requestParameters.jwt, options).then((request) => request(axios, basePath));
+            return localVarFp.enroll(requestParameters.sessionId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary 내 신청 내역 조회 (최근 신청순, 대기 순번 포함)
+         * @param {EnrollmentApiMyEnrollmentsRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        myEnrollments(requestParameters: EnrollmentApiMyEnrollmentsRequest = {}, options?: RawAxiosRequestConfig): AxiosPromise<Array<MyEnrollmentResponse>> {
+            return localVarFp.myEnrollments(requestParameters.status, options).then((request) => request(axios, basePath));
         },
     };
 };
+
+/**
+ * Request parameters for cancel operation in EnrollmentApi.
+ */
+export interface EnrollmentApiCancelRequest {
+    readonly enrollmentId: number
+}
 
 /**
  * Request parameters for enroll operation in EnrollmentApi.
  */
 export interface EnrollmentApiEnrollRequest {
     readonly sessionId: number
+}
 
-    readonly jwt: Jwt
+/**
+ * Request parameters for myEnrollments operation in EnrollmentApi.
+ */
+export interface EnrollmentApiMyEnrollmentsRequest {
+    /**
+     * 신청 상태. 생략하면 전체
+     */
+    readonly status?: MyEnrollmentsStatusEnum
 }
 
 /**
@@ -139,13 +267,42 @@ export interface EnrollmentApiEnrollRequest {
 export class EnrollmentApi extends BaseAPI {
     /**
      * 
+     * @summary 내 신청 취소 (확정 취소 시 대기 1순위 자동 확정)
+     * @param {EnrollmentApiCancelRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public cancel(requestParameters: EnrollmentApiCancelRequest, options?: RawAxiosRequestConfig) {
+        return EnrollmentApiFp(this.configuration).cancel(requestParameters.enrollmentId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
      * @summary 수강 신청 (정원 안이면 확정, 정원이 차면 대기)
      * @param {EnrollmentApiEnrollRequest} requestParameters Request parameters.
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
     public enroll(requestParameters: EnrollmentApiEnrollRequest, options?: RawAxiosRequestConfig) {
-        return EnrollmentApiFp(this.configuration).enroll(requestParameters.sessionId, requestParameters.jwt, options).then((request) => request(this.axios, this.basePath));
+        return EnrollmentApiFp(this.configuration).enroll(requestParameters.sessionId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary 내 신청 내역 조회 (최근 신청순, 대기 순번 포함)
+     * @param {EnrollmentApiMyEnrollmentsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public myEnrollments(requestParameters: EnrollmentApiMyEnrollmentsRequest = {}, options?: RawAxiosRequestConfig) {
+        return EnrollmentApiFp(this.configuration).myEnrollments(requestParameters.status, options).then((request) => request(this.axios, this.basePath));
     }
 }
 
+export const MyEnrollmentsStatusEnum = {
+    Confirmed: 'CONFIRMED',
+    Waiting: 'WAITING',
+    Completed: 'COMPLETED',
+    Cancelled: 'CANCELLED',
+} as const;
+export type MyEnrollmentsStatusEnum = typeof MyEnrollmentsStatusEnum[keyof typeof MyEnrollmentsStatusEnum];

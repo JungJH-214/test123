@@ -71,25 +71,17 @@ No authorization required
 ```typescript
 import {
     AuthApi,
-    Configuration,
-    Jwt
+    Configuration
 } from './api';
 
 const configuration = new Configuration();
 const apiInstance = new AuthApi(configuration);
 
-let jwt: Jwt; // (default to undefined)
-
-const { status, data } = await apiInstance.me(
-    jwt
-);
+const { status, data } = await apiInstance.me();
 ```
 
 ### Parameters
-
-|Name | Type | Description  | Notes|
-|------------- | ------------- | ------------- | -------------|
-| **jwt** | **Jwt** |  | defaults to undefined|
+This endpoint does not have any parameters.
 
 
 ### Return type
