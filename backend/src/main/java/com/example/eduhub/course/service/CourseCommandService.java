@@ -14,6 +14,7 @@ import com.example.eduhub.course.repository.CourseRepository;
 import com.example.eduhub.course.repository.CourseSessionRepository;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ public class CourseCommandService {
 
   private final CourseRepository courseRepository;
   private final CourseSessionRepository courseSessionRepository;
+  private final SessionSeatCounter sessionSeatCounter;
 
   public CourseDetailResponse createCourse(CourseRequest request) {
     Course course =
@@ -66,7 +68,7 @@ public class CourseCommandService {
         courseSessionRepository.save(
             CourseSession.create(
                 course, request.getStartDate(), request.getPlace(), request.getCapacity()));
-    return SessionResponse.from(session);
+    return SessionResponse.of(session, 0L);
   }
 
   public SessionResponse updateSession(Long courseId, Long sessionId, SessionRequest request) {
@@ -75,13 +77,13 @@ public class CourseCommandService {
       throw new SessionClosedException(sessionId);
     }
     session.update(request.getStartDate(), request.getPlace(), request.getCapacity());
-    return SessionResponse.from(session);
+    return toResponse(session);
   }
 
   public SessionResponse closeSession(Long courseId, Long sessionId) {
     CourseSession session = findSession(courseId, sessionId);
     session.close();
-    return SessionResponse.from(session);
+    return toResponse(session);
   }
 
   private Course findCourse(Long courseId) {
@@ -104,8 +106,22 @@ public class CourseCommandService {
     return courseSessionRepository.findByCourseIdOrderByStartDateAsc(courseId);
   }
 
-  private static CourseDetailResponse toDetail(Course course, List<CourseSession> sessions) {
+  private SessionResponse toResponse(CourseSession session) {
+    long seatsTaken =
+        sessionSeatCounter
+            .countSeatsTaken(Collections.singletonList(session.getId()))
+            .getOrDefault(session.getId(), 0L);
+    return SessionResponse.of(session, seatsTaken);
+  }
+
+  private CourseDetailResponse toDetail(Course course, List<CourseSession> sessions) {
+    Map<Long, Long> seatsTaken =
+        sessionSeatCounter.countSeatsTaken(
+            sessions.stream().map(CourseSession::getId).collect(Collectors.toList()));
     return CourseDetailResponse.of(
-        course, sessions.stream().map(SessionResponse::from).collect(Collectors.toList()));
+        course,
+        sessions.stream()
+            .map(s -> SessionResponse.of(s, seatsTaken.getOrDefault(s.getId(), 0L)))
+            .collect(Collectors.toList()));
   }
 }

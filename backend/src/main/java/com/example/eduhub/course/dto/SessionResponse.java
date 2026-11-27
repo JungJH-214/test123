@@ -29,14 +29,14 @@ public final class SessionResponse {
     this.status = status;
   }
 
-  /** 수강 신청이 아직 없으므로 남은 자리는 정원과 같다. */
-  public static SessionResponse from(CourseSession session) {
+  /** 남은 자리는 정원에서 정원을 차지한 수(확정 + 수료, D-05)를 뺀 값이며 0 아래로 내려가지 않는다. 정원을 줄여 차지 수가 정원을 넘어도 0이다. */
+  public static SessionResponse of(CourseSession session, long seatsTaken) {
     return new SessionResponse(
         session.getId(),
         session.getStartDate(),
         session.getPlace(),
         session.getCapacity(),
-        session.getCapacity(),
+        (int) Math.max(0L, session.getCapacity() - seatsTaken),
         session.getStatus());
   }
 
