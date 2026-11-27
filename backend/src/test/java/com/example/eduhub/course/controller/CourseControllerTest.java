@@ -93,7 +93,8 @@ class CourseControllerTest {
   void getCourse_returnsDetailWithSessions() throws Exception {
     Course course = Course.create("Java 기초", "개발", "입문 과정");
     SessionResponse session =
-        SessionResponse.from(CourseSession.create(course, LocalDate.of(2026, 12, 1), "본사 3층", 20));
+        SessionResponse.of(
+            CourseSession.create(course, LocalDate.of(2026, 12, 1), "본사 3층", 20), 0L);
     given(courseQueryService.getDetail(1L))
         .willReturn(CourseDetailResponse.of(course, List.of(session)));
 

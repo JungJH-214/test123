@@ -77,6 +77,45 @@ class OpenApiDocsTest {
   }
 
   @Test
+  void apiDocs_roster_taggedRoster() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.paths['/api/admin/sessions/{sessionId}/roster'].get.tags")
+                .value(contains("Roster")))
+        .andExpect(
+            jsonPath("$.paths['/api/admin/sessions/{sessionId}/completions'].post.tags")
+                .value(contains("Roster")));
+  }
+
+  @Test
+  void apiDocs_allTags_areAsciiIdentifiers() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            result -> {
+              JsonNode paths =
+                  new ObjectMapper()
+                      .readTree(result.getResponse().getContentAsString())
+                      .path("paths");
+              // 경로가 없어 허위로 통과하지 않도록 먼저 확인한다.
+              assertThat(paths.size()).as("문서에 경로가 있어야 한다").isGreaterThan(0);
+              int tagCount = 0;
+              for (JsonNode pathItem : paths) {
+                for (JsonNode operation : pathItem) {
+                  for (JsonNode tag : operation.path("tags")) {
+                    tagCount++;
+                    assertThat(tag.asText()).matches("^[A-Za-z][A-Za-z0-9]*$");
+                  }
+                }
+              }
+              assertThat(tagCount).as("태그가 하나 이상 있어야 한다").isGreaterThan(0);
+            });
+  }
+
+  @Test
   void apiDocs_enrollmentResponse_hasWaitingNumber() throws Exception {
     mockMvc
         .perform(get("/v3/api-docs"))

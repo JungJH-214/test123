@@ -29,6 +29,16 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
   long countBySessionIdAndStatusIn(Long sessionId, Collection<EnrollmentStatus> statuses);
 
+  /** 회차별로 주어진 상태의 신청 수를 한 번에 센다 (쿼리 1개). 해당 신청이 없는 회차는 결과에 없다. 빈 ID 목록은 넘기지 않는다. */
+  @Query(
+      "select e.session.id as sessionId, count(e) as seatsTaken "
+          + "from Enrollment e "
+          + "where e.session.id in :sessionIds and e.status in :statuses "
+          + "group by e.session.id")
+  List<SessionSeatCountRow> countSeatsTakenBySessionIds(
+      @Param("sessionIds") Collection<Long> sessionIds,
+      @Param("statuses") Collection<EnrollmentStatus> statuses);
+
   /** 회차에서 주어진 임직원들의 신청을 한 번에 읽는다 (FR-08 수료 처리). 신청이 없는 임직원은 결과에 없다. */
   List<Enrollment> findBySessionIdAndEmployeeIdIn(Long sessionId, Collection<Long> employeeIds);
 

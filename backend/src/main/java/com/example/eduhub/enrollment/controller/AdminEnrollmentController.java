@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 관리자 수강 관리: 회차 명단과 수료 처리 (FR-08). ADMIN만 접근한다 (D-03, NFR-03). */
-@Tag(name = "관리자-수강", description = "회차 명단 조회와 수료 처리 (관리자)")
+@Tag(name = "Roster", description = "회차 명단 조회와 수료 처리 (관리자)")
 @RestController
 @RequestMapping("/api/admin/sessions")
 @RequiredArgsConstructor

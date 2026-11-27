@@ -251,6 +251,37 @@ class EnrollmentRepositoryTest {
   }
 
   @Test
+  void countSeatsTakenBySessionIds_countsConfirmedAndCompletedPerSession() {
+    Course course = em.persist(Course.create("Java 기초", "개발", null));
+    CourseSession a = newSession(course);
+    CourseSession b = newSession(course);
+    CourseSession c = newSession(course);
+    em.persist(Enrollment.create(a, 1L, EnrollmentStatus.CONFIRMED));
+    em.persist(Enrollment.create(a, 2L, EnrollmentStatus.CONFIRMED));
+    em.persist(Enrollment.create(a, 3L, EnrollmentStatus.COMPLETED));
+    em.persist(Enrollment.create(a, 4L, EnrollmentStatus.WAITING));
+    em.persist(Enrollment.create(a, 5L, EnrollmentStatus.CANCELLED));
+    em.persist(Enrollment.create(b, 6L, EnrollmentStatus.WAITING));
+    em.flush();
+    em.clear();
+    Statistics statistics =
+        em.getEntityManager()
+            .getEntityManagerFactory()
+            .unwrap(SessionFactory.class)
+            .getStatistics();
+    statistics.clear();
+
+    List<SessionSeatCountRow> rows =
+        enrollmentRepository.countSeatsTakenBySessionIds(
+            Arrays.asList(a.getId(), b.getId(), c.getId()), EnrollmentStatus.SEAT_STATUSES);
+
+    assertThat(rows).hasSize(1);
+    assertThat(rows.get(0).getSessionId()).isEqualTo(a.getId());
+    assertThat(rows.get(0).getSeatsTaken()).isEqualTo(3L);
+    assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+  }
+
+  @Test
   void existsBySessionIdAndEmployeeIdAndStatusNot_trueOnlyForSameSessionAndEmployee() {
     Course course = em.persist(Course.create("Java 기초", "개발", null));
     CourseSession a = newSession(course);

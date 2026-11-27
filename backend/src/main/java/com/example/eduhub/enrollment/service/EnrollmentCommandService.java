@@ -16,8 +16,6 @@ import com.example.eduhub.enrollment.repository.EnrollmentConstraints;
 import com.example.eduhub.enrollment.repository.EnrollmentRepository;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -46,9 +44,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class EnrollmentCommandService {
-
-  private static final List<EnrollmentStatus> SEAT_STATUSES =
-      Arrays.asList(EnrollmentStatus.CONFIRMED, EnrollmentStatus.COMPLETED);
 
   private final CourseSessionRepository courseSessionRepository;
   private final EnrollmentRepository enrollmentRepository;
@@ -133,7 +128,8 @@ public class EnrollmentCommandService {
 
   /** 정원을 차지한 수. 확정(CONFIRMED)과 수료(COMPLETED) 합계다 (D-05). 신청 판정과 승급이 함께 쓴다. */
   private long countSeatsTaken(Long sessionId) {
-    return enrollmentRepository.countBySessionIdAndStatusIn(sessionId, SEAT_STATUSES);
+    return enrollmentRepository.countBySessionIdAndStatusIn(
+        sessionId, EnrollmentStatus.SEAT_STATUSES);
   }
 
   private Decision decide(CourseSession session) {

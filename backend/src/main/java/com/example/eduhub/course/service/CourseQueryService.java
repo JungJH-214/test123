@@ -5,6 +5,7 @@ import static com.example.eduhub.course.repository.CourseSpecifications.titleCon
 
 import com.example.eduhub.common.dto.PageResponse;
 import com.example.eduhub.course.domain.Course;
+import com.example.eduhub.course.domain.CourseSession;
 import com.example.eduhub.course.dto.CourseDetailResponse;
 import com.example.eduhub.course.dto.CourseSummaryResponse;
 import com.example.eduhub.course.dto.SessionResponse;
@@ -12,6 +13,7 @@ import com.example.eduhub.course.exception.CourseNotFoundException;
 import com.example.eduhub.course.repository.CourseRepository;
 import com.example.eduhub.course.repository.CourseSessionRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -27,6 +29,7 @@ public class CourseQueryService {
 
   private final CourseRepository courseRepository;
   private final CourseSessionRepository courseSessionRepository;
+  private final SessionSeatCounter sessionSeatCounter;
 
   public PageResponse<CourseSummaryResponse> search(
       String keyword, String category, Pageable pageable) {
@@ -41,10 +44,15 @@ public class CourseQueryService {
         courseRepository
             .findById(courseId)
             .orElseThrow(() -> new CourseNotFoundException(courseId));
-    List<SessionResponse> sessions =
-        courseSessionRepository.findByCourseIdOrderByStartDateAsc(courseId).stream()
-            .map(SessionResponse::from)
+    List<CourseSession> sessions =
+        courseSessionRepository.findByCourseIdOrderByStartDateAsc(courseId);
+    Map<Long, Long> seatsTaken =
+        sessionSeatCounter.countSeatsTaken(
+            sessions.stream().map(CourseSession::getId).collect(Collectors.toList()));
+    List<SessionResponse> responses =
+        sessions.stream()
+            .map(s -> SessionResponse.of(s, seatsTaken.getOrDefault(s.getId(), 0L)))
             .collect(Collectors.toList());
-    return CourseDetailResponse.of(course, sessions);
+    return CourseDetailResponse.of(course, responses);
   }
 }

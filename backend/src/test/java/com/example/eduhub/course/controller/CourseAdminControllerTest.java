@@ -273,8 +273,9 @@ class CourseAdminControllerTest {
   }
 
   private static SessionResponse sessionResponse() {
-    return SessionResponse.from(
+    return SessionResponse.of(
         CourseSession.create(
-            Course.create("Java 기초", "개발", null), LocalDate.of(2026, 12, 1), "본사 3층", 20));
+            Course.create("Java 기초", "개발", null), LocalDate.of(2026, 12, 1), "본사 3층", 20),
+        0L);
   }
 }

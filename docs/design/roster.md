@@ -14,7 +14,7 @@
 | Q3 | 사번·이름을 어떻게 가져오나 | enrollment → auth 읽기 의존을 허용한다. Repository JPQL에서 `Employee`를 LEFT JOIN해 조회 결과(projection)로 받는다. `backend/CLAUDE.md`의 의존 방향 규칙을 고친다 |
 | Q4 | 시작일 기준 | Asia/Seoul 기준 `오늘 < startDate`이면 409. 시작일 당일부터 수료 처리할 수 있다 |
 
-## 1. API (`AdminEnrollmentController`, `@Tag("관리자-수강")`)
+## 1. API (`AdminEnrollmentController`, `@Tag("Roster")`)
 경로는 요구사항대로 `/api/admin`을 쓴다. 기존 관리자 API는 `/api/v1/admin`이지만, NFR-03 `SecurityConfig`는 두 경로를 모두 ADMIN으로 막는다.
 
 ### GET `/api/admin/sessions/{sessionId}/roster` — 회차 명단

@@ -15,7 +15,7 @@ Spring Boot API 서버. 명령은 모두 `backend/`에서 실행한다.
 ## 계층 규칙
 - **계층 순서:** Controller → Service → Repository. Controller에서 Repository를 직접 호출하지 않는다
 - **패키지:** 도메인 우선 구조 `com.example.eduhub.{course, enrollment, auth, common}`을 쓴다
-- **의존 방향:** 모든 도메인 → `common` 허용. 도메인 간은 `enrollment → course`, `enrollment → auth`(임직원 정보 읽기, FR-08)만 허용한다. `common`은 도메인 패키지에 의존하지 않는다. 테스트의 `@Import(SecurityConfig)`는 예외
+- **의존 방향:** 모든 도메인 → `common` 허용. 도메인 간은 `enrollment → course`, `enrollment → auth`(임직원 정보 읽기, FR-08)만 허용한다. `common`은 도메인 패키지에 의존하지 않는다. course가 enrollment 정보를 써야 하면 course에 인터페이스(포트)를 두고 enrollment가 구현한다 (예: `SessionSeatCounter`). 테스트의 `@Import(SecurityConfig)`는 예외
 
 ## JPA 규칙
 - **연관관계:** 연관관계는 `fetch = FetchType.LAZY`로 둔다

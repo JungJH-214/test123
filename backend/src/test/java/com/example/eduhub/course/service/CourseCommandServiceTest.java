@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.eduhub.course.domain.Course;
 import com.example.eduhub.course.domain.CourseSession;
@@ -23,6 +24,7 @@ import com.example.eduhub.course.repository.CourseRepository;
 import com.example.eduhub.course.repository.CourseSessionRepository;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,7 @@ class CourseCommandServiceTest {
 
   @Mock private CourseRepository courseRepository;
   @Mock private CourseSessionRepository courseSessionRepository;
+  @Mock private SessionSeatCounter sessionSeatCounter;
   @InjectMocks private CourseCommandService service;
 
   // ---- 과정 ----
@@ -101,6 +104,7 @@ class CourseCommandServiceTest {
     given(courseRepository.findById(1L)).willReturn(Optional.of(course));
     given(courseSessionRepository.findByCourseIdOrderByStartDateAsc(1L))
         .willReturn(List.of(first, second));
+    given(sessionSeatCounter.countSeatsTaken(List.of(10L, 11L))).willReturn(Map.of(10L, 4L));
 
     CourseDetailResponse response = service.closeCourse(1L);
 
@@ -111,6 +115,10 @@ class CourseCommandServiceTest {
     assertThat(response.getSessions())
         .extracting(SessionResponse::getStatus)
         .containsOnly(SessionStatus.CLOSED);
+    assertThat(response.getSessions())
+        .extracting(SessionResponse::getRemainingSeats)
+        .containsExactly(16, 20);
+    verify(sessionSeatCounter).countSeatsTaken(List.of(10L, 11L));
   }
 
   @Test
@@ -148,6 +156,8 @@ class CourseCommandServiceTest {
     assertThat(response.getPlace()).isEqualTo("본사 3층");
     assertThat(response.getCapacity()).isEqualTo(20);
     assertThat(response.getStatus()).isEqualTo(SessionStatus.OPEN);
+    assertThat(response.getRemainingSeats()).isEqualTo(20);
+    verifyNoInteractions(sessionSeatCounter);
   }
 
   @Test
@@ -185,6 +195,7 @@ class CourseCommandServiceTest {
   void updateSession_changesValues() {
     CourseSession session = session(course(1L), 10L);
     givenSession(1L, 10L, session);
+    given(sessionSeatCounter.countSeatsTaken(List.of(10L))).willReturn(Map.of(10L, 8L));
     LocalDate newDate = DATE.plusDays(7);
 
     SessionResponse response =
@@ -194,7 +205,7 @@ class CourseCommandServiceTest {
     assertThat(session.getPlace()).isEqualTo("온라인");
     assertThat(session.getCapacity()).isEqualTo(50);
     assertThat(response.getCapacity()).isEqualTo(50);
-    assertThat(response.getRemainingSeats()).isEqualTo(50);
+    assertThat(response.getRemainingSeats()).isEqualTo(42);
   }
 
   @Test
@@ -229,11 +240,13 @@ class CourseCommandServiceTest {
   void closeSession_closes() {
     CourseSession session = session(course(1L), 10L);
     givenSession(1L, 10L, session);
+    given(sessionSeatCounter.countSeatsTaken(List.of(10L))).willReturn(Map.of(10L, 5L));
 
     SessionResponse response = service.closeSession(1L, 10L);
 
     assertThat(session.getStatus()).isEqualTo(SessionStatus.CLOSED);
     assertThat(response.getStatus()).isEqualTo(SessionStatus.CLOSED);
+    assertThat(response.getRemainingSeats()).isEqualTo(15);
   }
 
   @Test
